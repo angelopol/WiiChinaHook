@@ -129,6 +129,19 @@ y x = PitchDown − PitchUp, y = RollLeft − RollRight, z = YawLeft − YawRigh
 del Wii. Por eso DSU envía `(X, −Z, −Y)` y `(−pitch, −yaw, −roll)`. Falta confirmarlo en
 el propio Dolphin (ver abajo).
 
+### Conexión DSU intermitente en Dolphin (2026-10-06)
+
+Reportado: el dispositivo DSU de Dolphin se conectaba y desconectaba constantemente.
+Dolphin pide el estado de los puertos cada segundo y elimina los dispositivos de un
+servidor si pasa 1 s sin respuesta; además los recrea cuando cambia el modelo de un slot.
+En Windows, los datos enviados a un cliente que había cerrado su socket (Dolphin al
+reconfigurar) volvían como WSAECONNRESET en cada `recvfrom`, y el servidor dejaba de leer
+ante ese error, así que las peticiones de puertos quedaban sin respuesta (reproducido: 4
+de 11 respondidas). Corregido desactivando `SIO_UDP_CONNRESET`, siguiendo la lectura tras
+esos errores (11 de 11) y anunciando un modelo constante "giroscopio completo" para los
+mandos conectados. Prueba de regresión en `tests/test_dsu.py`; falta confirmarlo en el
+propio Dolphin.
+
 ### Calibración de escala del MotionPlus
 
 Ajuste contra la gravedad probado con giros simulados sobre cada eje (escala 1,85,
@@ -151,6 +164,8 @@ signos invertidos, sesgo) y con la captura real de cabeceo del clon (factor ≈ 
 | Cambio de controlador | Ajustes → Controlador del adaptador: Intel a libusbK y de vuelta al Bluetooth de Windows, con UAC y sin Zadig |
 | Calibración rápida | Mantener la combinación ~0,6 s: doble vibración si está quieto (sesgo renovado y recentrado), larga si se mueve |
 | Calibración con la barra | Apuntar a la barra elimina la deriva del giro; **verificar el signo de la imagen IR** (al girar a la izquierda la barra debe seguir "de frente") |
+| Modos Xbox | B + flechas cambia de modo con N vibraciones; la plantilla de juego maneja un mando Xbox virtual (panel "Dispositivos de juego" de Windows o un juego); la vibración de los juegos llega al Wiimote |
+| Sacudidas / stick IR | El sentido de las sacudidas del Wiimote y del Nunchuk y el vertical del stick derecho por IR coinciden con el movimiento |
 
 Para cada prueba registrar modelo del mando/accesorios, configuración, resultado
 y ruta de la traza.

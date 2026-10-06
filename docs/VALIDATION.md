@@ -127,6 +127,18 @@ x = PitchDown − PitchUp, y = RollLeft − RollRight, z = YawLeft − YawRight:
 DSU therefore sends `(X, −Z, −Y)` and `(−pitch, −yaw, −roll)`. Still to confirm in
 Dolphin itself (see below).
 
+### DSU connection flapping in Dolphin (2026-10-06)
+
+Reported: Dolphin's DSU device kept connecting and disconnecting. Dolphin asks for port
+info every second and removes a server's devices when no port-info reply arrives for
+1 s; it also recreates them whenever a slot's model changes. On Windows, pad data sent
+to a client that had closed its socket (Dolphin reconfiguring) came back as
+WSAECONNRESET on every `recvfrom`, and the server stopped reading on that error, so
+the port-info requests went unanswered (reproduced: 4 of 11 answered). Fixed by
+disabling `SIO_UDP_CONNRESET`, continuing to read after such errors (11 of 11) and
+reporting a constant "full gyro" model for connected remotes. Regression test in
+`tests/test_dsu.py`; still to confirm in Dolphin itself.
+
 ### MotionPlus scale calibration
 
 Fit against gravity tested with simulated turns about every axis (scale 1.85, inverted
@@ -149,5 +161,7 @@ signs, bias) and with the real clone pitch capture (factor ≈ 1/1.85).
 | Driver switch | Settings → Adapter driver: Intel to libusbK and back to Windows Bluetooth, with UAC, no Zadig |
 | Quick calibration | Holding the combo ~0.6 s: double rumble when still (bias refreshed, recentered), long rumble when moving |
 | Sensor bar calibration | Pointing at the bar removes heading drift; **check the IR image sign** (turning left must keep the bar straight ahead) |
+| Xbox modes | B + arrows switch modes with N rumbles; game template drives a virtual Xbox controller (Windows "Game controllers" panel / a game); games' rumble reaches the Wiimote |
+| Xbox shakes / IR stick | Wiimote and Nunchuk shake directions and the IR right-stick vertical direction match the movement |
 
 For each test record the remote/accessory model, configuration, result and trace path.

@@ -53,6 +53,7 @@ class WiimoteSession:
         self.combo_fired = False
         self.quick_task = None
         self.on_bias_changed = None  # manager hook to persist a new gyro bias
+        self.led_mask = 0x10
         self.motionplus_port_connected = None
         self.last_status = time.monotonic()
 
@@ -270,6 +271,7 @@ class WiimoteSession:
     async def initialize(self, led_mask):
         self.state.phase = "initializing"
         self.publish(self.state)
+        self.led_mask = led_mask
         await self.command(0x11, bytes([led_mask]))
         await self.command(0x15, b"\0", response=0x20)
         for address in ((0x16, 0x20) if self.readable else ()):
@@ -467,6 +469,19 @@ class WiimoteSession:
         if not isinstance(mask, int) or mask < 0 or mask > 240 or mask & 15:
             raise ValueError("LED mask must contain only bits 0x10..0x80")
         await self.command(0x11, bytes([mask]))
+        self.led_mask = mask
+
+    async def blink_led(self, mask, times=3, period=0.3):
+        """Flash `mask` (e.g. the LED of a gamepad mode), then restore the player LED."""
+        try:
+            for _ in range(times):
+                self.send(0x11, bytes([mask]))
+                await asyncio.sleep(period)
+                self.send(0x11, b"\x00")
+                await asyncio.sleep(period)
+        finally:
+            if not self.closed:
+                self.send(0x11, bytes([self.led_mask]))
 
     async def rumble(self, duration_ms):
         if not isinstance(duration_ms, int) or not 0 <= duration_ms <= 5000:

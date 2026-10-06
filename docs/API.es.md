@@ -16,7 +16,27 @@ y opcionalmente `args`. El servidor responde con el mismo `id` y `ok`.
 {"v":1,"id":8,"command":"calibrate_axis","args":{"slot":0,"axis":"pitch"}}
 {"v":1,"id":9,"command":"slot_options","args":{"slot":0,"quick_calibration":true,"combo":"down","ir_calibration":true}}
 {"v":1,"id":10,"command":"quick_calibrate","args":{"slot":0}}
+{"v":1,"id":11,"command":"gamepad"}
+{"v":1,"id":12,"command":"gamepad_mode","args":{"mode":1}}
+{"v":1,"id":13,"command":"gamepad_config","args":{"config":{"modifier":"wm_b","mode":1,"modes":[{"buttons":{"A":"wm_a"}},null,null,null]}}}
 ```
+
+`gamepad` devuelve el estado de los modos Xbox: `mode`, `modifier`, `modes` (nombres de
+plantilla o null), `pads` (slots con mando virtual), `problems` (por slot, asignaciones que
+no puede usar), `error` (p. ej. falta ViGEmBus) y la `config` completa. `gamepad_mode`
+cambia el modo de todos los mandos y `gamepad_config` reemplaza la configuración (validada;
+los controles Xbox no indicados quedan sin asignar). Fuentes:
+`wm_up/down/left/right/a/b/minus/plus/home/1/2`, `nc_c`, `nc_z`,
+`wm_shake_x/y/z` y `nc_shake_x/y/z` (sacudida en un eje, en cualquier sentido; los antiguos
+`*_shake_left/right/up/down/forward/back` se siguen aceptando), o hasta tres de ellos unidos
+con `+` (botones y/o sacudidas); en cada plantilla, `shake_wm` y `shake_nc` dan los umbrales
+por eje en g y `gyro_full_dps`/`gyro_full_dps_y` la sensibilidad horizontal/vertical del
+giroscopio. El campo `shakes` del estado (`seq` y los últimos eventos por slot con
+`device`, `axis` y `g`) sirve para ajustarlos; sticks `nc_stick`, `gyro`,
+`ir`. Tras `subscribe` llega `{"event":"gamepad","data":...}` cada vez que cambian el modo
+o sus avisos, y
+`{"event":"xbox","data":{"slot":0,"active":true,"buttons":["A"],"lt":0,"rt":1,"lx":0,"ly":0,"rx":0,"ry":0}}`
+cada vez que cambia la salida del mando virtual de un slot (`"active": false` si no tiene).
 
 `slot_options` cambia en vivo las opciones de calibración rápida y por barra sensora de un
 slot (solo los campos indicados; la respuesta los incluye todos) y `quick_calibrate`

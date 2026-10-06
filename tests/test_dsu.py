@@ -86,3 +86,49 @@ def test_udp_port_query_and_sensor_mapping(server):
             assert zlib.crc32(r[:8]+bytes(4)+r[12:]) == expected
     finally:
         client.close()
+
+
+def test_port_info_keeps_answering_after_a_client_closes_its_socket():
+    # Dolphin drops a DSU server's devices when port info goes unanswered for 1 s.
+    # A client that closed its socket used to flood recvfrom with WSAECONNRESET
+    # (ICMP port unreachable) and starve the real requests.
+    import socket as socket_module
+    import time
+    import zlib
+
+    def client_packet(kind, payload):
+        body = struct.pack("<I", kind) + payload
+        raw = bytearray(b"DSUC" + struct.pack("<HHII", 1001, len(body), 0, 0xC0FFEE) + body)
+        struct.pack_into("<I", raw, 8, zlib.crc32(raw) & 0xFFFFFFFF)
+        return bytes(raw)
+
+    server = DsuServer("127.0.0.1", 0)
+    port = server.sock.getsockname()[1]
+    state = WiimoteState("02:00:44:42:00:00", 0)
+    state.connected = True
+    stale = socket_module.socket(socket_module.AF_INET, socket_module.SOCK_DGRAM)
+    stale.sendto(client_packet(0x100002, bytes([1, 0]) + bytes(6)), ("127.0.0.1", port))
+    time.sleep(0.05)
+    server.poll()
+    stale.close()
+    client = socket_module.socket(socket_module.AF_INET, socket_module.SOCK_DGRAM)
+    client.setblocking(False)
+    answered = 0
+    try:
+        for request in range(10):
+            for _ in range(5):
+                server.send_state(state)         # remote reports keep flowing to the stale client
+            client.sendto(client_packet(0x100001, struct.pack("<i", 1) + bytes([0])), ("127.0.0.1", port))
+            time.sleep(0.01)
+            server.poll()
+            time.sleep(0.01)
+            try:
+                while True:
+                    data, _ = client.recvfrom(200)
+                    answered += struct.unpack_from("<I", data, 16)[0] == 0x100001
+            except (BlockingIOError, ConnectionResetError):
+                pass
+    finally:
+        server.close()
+        client.close()
+    assert answered == 10

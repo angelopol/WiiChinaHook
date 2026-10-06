@@ -48,6 +48,19 @@ def bar_value(value, limit: float) -> float:
     return max(0.0, min(1.0, 0.5 + value / (2 * limit)))
 
 
+def nunchuk_accel(nunchuk):
+    """(x, y, z) in g and whether it is approximate. Clone Nunchuks have no valid
+    factory calibration, so raw 10-bit values are shown as (raw - 512) / 200 g."""
+    if not nunchuk:
+        return None, False
+    if nunchuk.get("accel_g"):
+        return tuple(nunchuk["accel_g"]), False
+    raw = nunchuk.get("accel_raw")
+    if not raw:
+        return None, False
+    return tuple((v - 512) / 200.0 for v in raw), True
+
+
 def fmt(value, digits=2) -> str:
     return "—" if value is None else f"{value:+.{digits}f}"
 

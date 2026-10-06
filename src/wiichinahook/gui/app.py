@@ -16,9 +16,10 @@ import flet.canvas as cv
 from ..config import COMBOS, AppConfig, SlotOptions, load_config, parse_int, save_config
 from ..orientation import from_axis_angle, multiply, reference_yaw
 from .i18n import LANGUAGES, Translator
-from .model import (BUTTONS, BUTTON_LABELS, bar_value, config_from_form, fmt, form_from_config,
+from .model import (BUTTONS, BUTTON_LABELS, bar_value, config_from_form, fmt, form_from_config, nunchuk_accel,
                     ir_to_canvas, led_mask, pressed_buttons, stick_to_canvas)
 from .service import ServiceRuntime
+from .gamepad_tab import GamepadTab
 from .wiimote3d import project
 from ..drivers import choose, packages_for, switch_adapter
 from ..usb_drivers import ZADIG_URL, find_zadig, list_adapters
@@ -72,6 +73,8 @@ class SlotCard:
         self.nunchuk_buttons = {"c": chip("C"), "z": chip("Z")}
         self.accel_bars, self.accel_labels, accel_rows = axis_rows(("X", "Y", "Z"))
         self.gyro_bars, self.gyro_labels, gyro_rows = axis_rows(("Yaw", "Roll", "Pitch"))
+        self.nc_bars, self.nc_labels, nc_rows = axis_rows(("X", "Y", "Z"))
+        self.nc_accel_title = ft.Text(t("nc_accel"), size=12, weight=ft.FontWeight.W_600)
         self.ir_canvas = cv.Canvas(shapes=[], width=IR_W, height=IR_H)
         self.stick_canvas = cv.Canvas(shapes=[], width=STICK, height=STICK)
         self.pose_canvas = cv.Canvas(shapes=[], width=POSE_W, height=POSE_H)
@@ -122,7 +125,8 @@ class SlotCard:
                                         border_radius=6)], spacing=4),
                 ft.Column([ft.Text(t("nunchuk"), size=12, weight=ft.FontWeight.W_600),
                            ft.Container(self.stick_canvas, width=STICK, height=STICK,
-                                        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST, border_radius=STICK / 2)],
+                                        bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST, border_radius=STICK / 2),
+                           self.nc_accel_title, *nc_rows],
                           spacing=4),
             ]),
             ft.Row(self.action_controls, wrap=True, spacing=6),
@@ -148,6 +152,11 @@ class SlotCard:
         for name, control in self.buttons.items():
             control.bgcolor = ft.Colors.PRIMARY if name in pressed else ft.Colors.SURFACE_CONTAINER_HIGHEST
         nunchuk = state.get("nunchuk") if connected else None
+        nc_accel, approximate = nunchuk_accel(nunchuk)
+        self.nc_accel_title.value = self.t("nc_accel") + (" ≈" if approximate else "")
+        for i in range(3):
+            self.nc_bars[i].value = bar_value(nc_accel[i] if nc_accel else None, 3.0)
+            self.nc_labels[i].value = fmt(nc_accel[i] if nc_accel else None)
         for key, control in self.nunchuk_buttons.items():
             control.bgcolor = ft.Colors.PRIMARY if nunchuk and nunchuk.get(key) else ft.Colors.SURFACE_CONTAINER_HIGHEST
         if connected:
@@ -278,7 +287,11 @@ class Controller:
         logging.getLogger().addHandler(self.logs)
         logging.getLogger().setLevel(logging.INFO)
         self.log_version = -1
-        self.runtime = ServiceRuntime(self.on_state, self.on_status)
+        self.runtime = ServiceRuntime(self.on_state, self.on_status, on_gamepad=self.on_gamepad,
+                                      on_xbox=self.on_xbox)
+        self.xbox_outputs = {}
+        self.gamepad_tab = None
+        self.gamepad_status = None
         self.cards = []
         self.closing = False
 
@@ -306,6 +319,26 @@ class Controller:
     def on_state(self, state):
         self.states[state["slot"]] = state
         self.dirty.add(state["slot"])
+
+    def on_xbox(self, output):
+        self.xbox_outputs[output["slot"]] = output
+        self.dirty.add("xbox")
+
+    def on_gamepad(self, status):
+        self.gamepad_status = status
+        self.dirty.add("gamepad")
+
+    async def update_gamepad(self, gamepad):
+        """Save the Xbox modes and apply them to the running service at once."""
+        try:
+            config = replace(self.load_config(), gamepad=gamepad)
+            save_config(config, self.config_path)
+        except (OSError, ValueError) as exc:
+            self.notify(self.t("failed", error=exc))
+            return
+        self.config = config
+        if self.runtime.active:
+            await self.command("gamepad_config", config=gamepad)
 
     def on_status(self, status, error):
         self.refresh_status()
@@ -347,11 +380,14 @@ class Controller:
         self.log_view = ft.ListView(expand=True, spacing=2, auto_scroll=True)
         log_tab = ft.Column(expand=True, controls=[
             ft.Row([ft.TextButton(t("clear_log"), on_click=self.on_clear_log)]), self.log_view])
-        tabs = ft.Tabs(length=3, expand=True, content=ft.Column(expand=True, controls=[
+        self.gamepad_tab = GamepadTab(self)
+        gamepad = self.gamepad_tab.build()
+        tabs = ft.Tabs(length=4, expand=True, content=ft.Column(expand=True, controls=[
             ft.TabBar(tabs=[ft.Tab(label=t("tab_controllers"), icon=ft.Icons.SPORTS_ESPORTS),
                             ft.Tab(label=t("tab_settings"), icon=ft.Icons.SETTINGS),
+                            ft.Tab(label=t("tab_gamepad"), icon=ft.Icons.VIDEOGAME_ASSET),
                             ft.Tab(label=t("tab_log"), icon=ft.Icons.ARTICLE)]),
-            ft.TabBarView(expand=True, controls=[controllers, self.build_settings(), log_tab]),
+            ft.TabBarView(expand=True, controls=[controllers, self.build_settings(), gamepad, log_tab]),
         ]))
         page.add(header, tabs)
         for slot in range(4):
@@ -438,6 +474,14 @@ class Controller:
         self.page.update()
 
     def render(self):
+        if "gamepad" in self.dirty:
+            self.dirty.discard("gamepad")
+            if self.gamepad_tab and self.gamepad_status:
+                self.gamepad_tab.on_status(self.gamepad_status)
+        if "xbox" in self.dirty:
+            self.dirty.discard("xbox")
+            if self.gamepad_tab:
+                self.gamepad_tab.on_xbox(self.xbox_outputs)
         for slot in sorted(self.dirty):
             self.cards[slot].render(self.states.get(slot))
         self.dirty.clear()
@@ -471,6 +515,10 @@ class Controller:
                     self.service_mode = (await self.runtime.snapshot()).get("mode", self.config.mode)
                 except Exception:
                     self.service_mode = self.config.mode
+                try:
+                    self.on_gamepad(await self.runtime.request("gamepad"))
+                except Exception as exc:
+                    log.debug("Gamepad status unavailable: %s", exc)
         self.refresh_status()
 
     def on_mode_change(self, e):

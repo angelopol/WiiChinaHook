@@ -4,3 +4,4 @@ libusb1==3.4.0
 libusb-package==1.0.26.4
 websockets==17.2
 hidapi==0.15.0
+vgamepad==0.1.0; sys_platform == 'win32'

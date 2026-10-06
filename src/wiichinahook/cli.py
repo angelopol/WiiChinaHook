@@ -120,7 +120,7 @@ def main() -> None:
         help="legacy Wiimote PIN strategy; default uses local BD_ADDR bytes",
     )
 
-    for name in ("pair", "devices", "forget", "monitor", "calibrate", "led", "rumble"):
+    for name in ("pair", "devices", "forget", "monitor", "calibrate", "led", "rumble", "gamepad"):
         client = subparsers.add_parser(name, help=f"{name} through the running hook API")
         client.add_argument("--url", default="ws://127.0.0.1:26761")
         if name in ("forget", "calibrate", "led", "rumble"):
@@ -133,6 +133,9 @@ def main() -> None:
             client.add_argument("--mask", type=parse_int, required=True)
         if name == "rumble":
             client.add_argument("--duration-ms", type=int, default=500)
+        if name == "gamepad":
+            client.add_argument("--mode", type=int, choices=range(1, 5),
+                                help="switch every remote to this Xbox/DSU mode (omit to show the status)")
         if name == "calibrate":
             client.add_argument("--axis", choices=("pitch", "roll", "yaw"),
                                 help="MotionPlus scale/sign calibration of one axis instead of the bias")
@@ -146,7 +149,7 @@ def main() -> None:
             raise SystemExit(f"GUI unavailable ({exc}). Install it with: pip install -e .[gui]") from exc
         run_gui(args.config)
         return
-    if args.command in ("pair", "devices", "forget", "monitor", "calibrate", "led", "rumble"):
+    if args.command in ("pair", "devices", "forget", "monitor", "calibrate", "led", "rumble", "gamepad"):
         asyncio.run(command_api(args))
         return
     if args.command == "usb-list":
@@ -206,6 +209,8 @@ async def command_api(args):
     command = "subscribe" if args.command == "monitor" else args.command
     if command == "calibrate" and "axis" in values:
         command = "calibrate_axis"
+    if command == "gamepad" and "mode" in values:
+        command = "gamepad_mode"
     request = {"v": 1, "id": 1, "command": command, "args": values}
     try:
         async with connect(args.url, open_timeout=5, max_size=262144) as websocket:

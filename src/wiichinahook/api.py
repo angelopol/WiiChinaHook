@@ -30,6 +30,16 @@ class ApiServer:
             pending[state.slot] = state.to_dict()
             wake.set()
 
+    def publish_xbox(self, output):
+        for pending, wake in self.subscribers.values():
+            pending[f"xbox{output['slot']}"] = output
+            wake.set()
+
+    def publish_gamepad(self, status):
+        for pending, wake in self.subscribers.values():
+            pending["gamepad"] = status
+            wake.set()
+
     async def handle(self, socket):
         lock = asyncio.Lock()
         async def send(data):
@@ -40,11 +50,12 @@ class ApiServer:
             while True:
                 await wake.wait()
                 await asyncio.sleep(1 / 60)
-                batch = list(pending.values())
+                batch = list(pending.items())
                 pending.clear()
                 wake.clear()
-                for state in batch:
-                    await send({"v": 1, "event": "state", "data": state})
+                for key, data in batch:
+                    event = "gamepad" if key == "gamepad" else "xbox" if str(key).startswith("xbox") else "state"
+                    await send({"v": 1, "event": event, "data": data})
         sender = None
         try:
             async for raw in socket:
@@ -92,6 +103,15 @@ class ApiServer:
     async def dispatch(self, command, args):
         if command == "devices":
             return self.manager.snapshot()
+        if command in ("gamepad", "gamepad_mode", "gamepad_config"):
+            hub = getattr(self.manager, "gamepad", None)
+            if hub is None:
+                raise RuntimeError("Gamepad modes are not available in this service")
+            if command == "gamepad_mode":
+                return hub.set_mode(args.get("mode"))
+            if command == "gamepad_config":
+                return hub.set_config(args.get("config"))
+            return hub.status()
         if command == "pair":
             return await self.manager.pair(args.get("seconds", 20), args.get("mode", "sync"), args.get("address"))
         slot = args.get("slot", 0)

@@ -37,7 +37,7 @@ or the adapter at a time. To go back to Dolphin, stop the service.
 ```
 
 - **Controllers:** one card per slot with buttons, accelerometer, MotionPlus rates,
-  IR pointer, Nunchuk stick, battery and an **Orientation** view: a 3D Wiimote that
+  IR pointer, Nunchuk stick and accelerometer, battery and an **Orientation** view: a 3D Wiimote that
   follows the real controller (MotionPlus + gravity). The heading has no absolute
   reference and drifts slowly; **Recenter** makes the current heading "pointing at
   the screen" (lying flat) or "buttons facing you" (sideways grip). Without
@@ -50,6 +50,9 @@ or the adapter at a time. To go back to Dolphin, stop the service.
   libusbK/WinUSB driver; if there is none it explains how to install one with Zadig
   and offers to open or download it. **Adapter driver** switches an adapter between
   libusbK and its Windows Bluetooth driver without Zadig (see below).
+- **Xbox controller:** active mode, mode modifier, a live drawing of each remote's
+  virtual Xbox controller (pressed buttons light up, triggers fill, sticks move) and a
+  free remapping of every Xbox control for each of the four modes (see below).
 - **Log:** live service log.
 - English and Spanish UI (language selector in the header).
 
@@ -185,6 +188,51 @@ service first if it is using the adapter. The same is available as
 Clone "CSR 4.0" dongles (`0A12:0001`, `bcdDevice 0x8891`) declare a duplicated USB
 alternate setting; Windows refuses to start them with libusbK, WinUSB or UsbDk (Code
 10), which is also why they fail with Dolphin's passthrough. They are not supported.
+
+## Xbox controller modes
+
+Like the four modes of the DolphinBar, WiiChinaHook has four modes shared by every
+connected Wiimote. A mode with an Xbox template gives each remote its own virtual Xbox
+360 controller, so any Windows game with controller support can use it; an empty mode
+only keeps DSU/API (for Dolphin). DSU keeps working in every mode.
+
+**Switching modes on the remote:** hold the modifier (default **B**) and press an arrow,
+clockwise: ↑ mode 1, → mode 2, ↓ mode 3, ← mode 4. The arrow is not sent to the game,
+and B keeps working as its trigger. Every remote blinks LED N three times and rumbles
+the mode number before returning to its player LED; an extra long
+rumble means the mode uses inputs that remote lacks (e.g. Nunchuk buttons without a
+Nunchuk), which are listed in the GUI. The Wiimote POWER button cannot be used: the
+hardware does not report it. Also `wiichinahook gamepad --mode N` or the GUI.
+
+Mode 1 starts as the game template (modes 2–4 start empty):
+
+| Xbox | Wiimote / Nunchuk |
+|---|---|
+| Left stick | Nunchuk stick |
+| LB / LT | C / Z |
+| RB / RT | A / B |
+| Right stick | MotionPlus rotation (or the IR pointer) |
+| X / Y / A / B | − / + / 1 / 2 |
+| Start / Back | Home / C and Z together (then LB/LT are not sent) |
+| D-pad | D-pad |
+| Guide, L3, R3 | unassigned |
+
+Every Xbox control can be remapped in the GUI to a Wiimote/Nunchuk button, a **shake**
+of the Wiimote or the Nunchuk along an axis (sideways, up/down, forward/back — either
+direction, since a quick shake always rebounds), or a **combination**
+of up to three of them held together — buttons and/or shakes, e.g. A + shake up. A
+combination does not also send its separate buttons, and longer combinations win over
+overlapping shorter ones. Shake sensitivity is set per axis for the Wiimote and the
+Nunchuk (the Nunchuk accelerometer is uncalibrated), with a live test in the tab that
+shows which axis fired and how hard. The right stick follows the gyro or the IR
+pointer, with separate horizontal/vertical gyro sensitivity, IR range and dead zone; the
+Nunchuk has no gyroscope. Games' rumble is forwarded to the
+Wiimote. The configuration is stored under `"gamepad"` in `config.local.json`.
+
+Requires the **ViGEmBus** driver (installed with DS4Windows/BthPS3, or by `vgamepad`'s
+bundled installer). ViGEmBus is no longer maintained by its author but works on
+Windows 11. Not yet verified on hardware: the
+vertical direction of the IR right stick.
 
 ## Configuration
 

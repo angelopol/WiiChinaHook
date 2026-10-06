@@ -1,6 +1,7 @@
 """DSU v1001: one socket, independent subscriptions and four real slot states."""
 from __future__ import annotations
 
+import os
 import random
 import socket
 import struct
@@ -40,6 +41,26 @@ def parse_client_packet(data):
     return struct.unpack_from("<I", packet, 16)[0], bytes(packet[20:])
 
 
+def disable_udp_connreset(sock):
+    """Windows reports an ICMP 'port unreachable' (a DSU client that closed its socket,
+    e.g. Dolphin reconfiguring) as WSAECONNRESET on the *next* recvfrom. With pad data
+    sent at ~200 Hz to that stale client, those errors starved the real requests, and
+    Dolphin drops a server's devices when port info goes unanswered for 1 s."""
+    if os.name != "nt":
+        return False
+    import ctypes
+    from ctypes import wintypes
+    ws2_32 = ctypes.WinDLL("ws2_32", use_last_error=True)
+    ws2_32.WSAIoctl.argtypes = [ctypes.c_size_t, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD,
+                                ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD),
+                                ctypes.c_void_p, ctypes.c_void_p]
+    SIO_UDP_CONNRESET = 0x9800000C
+    enabled = wintypes.BOOL(False)
+    returned = wintypes.DWORD()
+    return ws2_32.WSAIoctl(sock.fileno(), SIO_UDP_CONNRESET, ctypes.byref(enabled), ctypes.sizeof(enabled),
+                           None, 0, ctypes.byref(returned), None, None) == 0
+
+
 def parse_mac(mac):
     raw = bytes.fromhex(mac.replace(":", "").replace("-", ""))
     if len(raw) != 6:
@@ -60,6 +81,7 @@ class DsuServer:
         except BaseException:
             self.sock.close()
             raise
+        disable_udp_connreset(self.sock)
 
     def close(self):
         self.sock.close()
@@ -73,8 +95,10 @@ class DsuServer:
         for _ in range(64):
             try:
                 data, endpoint = self.sock.recvfrom(2048)
-            except (BlockingIOError, ConnectionResetError):
+            except BlockingIOError:
                 return
+            except ConnectionResetError:
+                continue  # a stale client's ICMP error: keep reading the real requests
             self._handle_packet(data, endpoint)
 
     def _send(self, packet, endpoint):
@@ -110,8 +134,9 @@ class DsuServer:
         connected = state is not None and state.connected
         battery = 0 if not connected or state.battery is None else (1 if state.battery < .1 else
                   2 if state.battery < .25 else 3 if state.battery < .5 else 4 if state.battery < .9 else 5)
-        return struct.pack("<BBBB6sB", slot, 2 if connected else 0,
-                           (2 if state.capabilities.get("motionplus") else 1) if connected else 0,
+        # Model is "full gyro" for every connected remote: Dolphin recreates its devices
+        # whenever a slot's model changes, and MotionPlus is detected after connecting.
+        return struct.pack("<BBBB6sB", slot, 2 if connected else 0, 2 if connected else 0,
                            2 if connected else 0, parse_mac(state.address) if state else bytes(6), battery)
 
     def send_state(self, state):

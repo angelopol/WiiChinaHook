@@ -124,12 +124,16 @@ def test_slot_card_renders_live_and_empty_states():
     state.update(connected=True, phase="ready", buttons=0x0008, battery=0.5, accel_g=[0.0, 0.1, 1.0],
                  gyro_dps=[5.6, -4.7, 11.2], extension="motionplus+nunchuk",
                  ir=[{"x": 500, "y": 300, "size": None}, None, None, None],
-                 nunchuk={"stick": [0.5, -0.5], "c": True, "z": False}, calibration={"accelerometer": "typical"})
+                 nunchuk={"stick": [0.5, -0.5], "c": True, "z": False, "accel_raw": [512, 712, 412]},
+                 calibration={"accelerometer": "typical"})
     card.render(state)
     assert card.buttons["a"].bgcolor == ft.Colors.PRIMARY and card.buttons["b"].bgcolor != ft.Colors.PRIMARY
     assert card.nunchuk_buttons["c"].bgcolor == ft.Colors.PRIMARY
     assert card.accel_labels[2].value == "+1.00" and len(card.ir_canvas.shapes) == 1
     assert len(card.stick_canvas.shapes) == 2 and not card.action_controls[0].disabled
+    # Uncalibrated Nunchuk accelerometer shown as approximate g: (raw - 512) / 200.
+    assert [label.value for label in card.nc_labels] == ["+0.00", "+1.00", "-0.50"]
+    assert card.nc_accel_title.value.endswith("≈")
     card.render(None)
     assert card.action_controls[0].disabled and card.ir_canvas.shapes == []
 
@@ -169,3 +173,21 @@ async def test_api_rejects_unknown_calibration_axis():
     server = ApiServer(manager)
     with pytest.raises(ValueError, match="axis"):
         await server.dispatch("calibrate_axis", {"slot": 0, "axis": "sideways"})
+
+
+def test_xbox_view_lights_pressed_controls():
+    pytest.importorskip("flet")
+    import flet.canvas as cv
+    from wiichinahook.gui import xbox_view
+    idle = xbox_view.shapes(None)
+    live = xbox_view.shapes({"active": True, "buttons": ["A", "LB", "DPAD_UP"], "lt": 0.0, "rt": 1.0,
+                             "lx": 1.0, "ly": 0.0, "rx": 0.0, "ry": 0.0})
+    colors = lambda shapes: [s.paint.color for s in shapes if hasattr(s, "paint") and s.paint]
+    assert xbox_view.FACE["A"][1] in colors(live) and xbox_view.FACE["A"][1] not in colors(idle)
+    assert colors(live).count(xbox_view.LIT) > colors(idle).count(xbox_view.LIT)
+    rt_fill = [s for s in live if isinstance(s, cv.Rect) and s.x == 230 and s.paint.color == xbox_view.LIT]
+    assert rt_fill and rt_fill[0].width == 60
+    thumbs = [s for s in live if isinstance(s, cv.Circle) and s.radius == 15]
+    assert thumbs[0].x == xbox_view.LEFT_STICK[0] + xbox_view.STICK_TRAVEL   # left stick pushed right
+    inactive = xbox_view.shapes({"active": False, "buttons": ["A"]})
+    assert colors(inactive) == colors(idle)

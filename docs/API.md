@@ -16,7 +16,25 @@ JSON over WebSocket at `ws://127.0.0.1:26761`. Each request carries `v`, `id`,
 {"v":1,"id":8,"command":"calibrate_axis","args":{"slot":0,"axis":"pitch"}}
 {"v":1,"id":9,"command":"slot_options","args":{"slot":0,"quick_calibration":true,"combo":"down","ir_calibration":true}}
 {"v":1,"id":10,"command":"quick_calibrate","args":{"slot":0}}
+{"v":1,"id":11,"command":"gamepad"}
+{"v":1,"id":12,"command":"gamepad_mode","args":{"mode":1}}
+{"v":1,"id":13,"command":"gamepad_config","args":{"config":{"modifier":"wm_b","mode":1,"modes":[{"buttons":{"A":"wm_a"}},null,null,null]}}}
 ```
+
+`gamepad` returns the Xbox mode status: `mode`, `modifier`, `modes` (template names or
+null), `pads` (slots with a virtual controller), `problems` (per slot, bindings it cannot
+drive), `error` (e.g. ViGEmBus missing) and the full `config`. `gamepad_mode` switches
+every remote, `gamepad_config` replaces the configuration (validated; unspecified Xbox
+controls are unassigned). Sources: `wm_up/down/left/right/a/b/minus/plus/home/1/2`,
+`nc_c`, `nc_z`, `wm_shake_x/y/z` and `nc_shake_x/y/z` (shake along an axis, either
+direction; the older `*_shake_left/right/up/down/forward/back` are still accepted), or up
+to three of them joined with `+` (buttons and/or shakes); per-template `shake_wm` and
+`shake_nc` give the per-axis thresholds in g and `gyro_full_dps`/`gyro_full_dps_y` the
+horizontal/vertical gyro sensitivity. The status `shakes` (`seq`, last events per slot
+with `device`, `axis`, `g`) is meant for tuning; sticks `nc_stick`, `gyro`, `ir`. After `subscribe`,
+`{"event":"gamepad","data":...}` arrives whenever the mode or its warnings change, and
+`{"event":"xbox","data":{"slot":0,"active":true,"buttons":["A"],"lt":0,"rt":1,"lx":0,"ly":0,"rx":0,"ry":0}}`
+whenever a slot's virtual controller output changes (`"active": false` when it has none).
 
 `slot_options` changes a slot's quick/sensor-bar calibration options live (only the
 given fields; the reply has all of them) and `quick_calibrate` runs the same quick

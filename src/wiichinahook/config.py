@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 import re
 
+from .gamepad.mapping import validate_config as validate_gamepad
+
 
 def parse_int(value):
     if value is None or value == "":
@@ -96,6 +98,8 @@ class AppConfig:
     ir: bool = True
     motionplus: bool = True
     slots: tuple[SlotOptions, ...] = (SlotOptions(),) * 4
+    # Virtual Xbox modes (gamepad.mapping): modifier, active mode, four templates.
+    gamepad: dict = field(default_factory=lambda: validate_gamepad(None))
 
 
 def load_config(path: str | Path) -> AppConfig:
@@ -142,6 +146,7 @@ def load_config(path: str | Path) -> AppConfig:
         ApiConfig(api.get("host", "127.0.0.1"), int(api.get("port", 26761))),
         path.parent / data.get("state_dir", ".wiichinahook"),
         bool(data.get("ir", True)), bool(data.get("motionplus", True)), slots,
+        validate_gamepad(data.get("gamepad")),
     )
 
 
@@ -173,6 +178,7 @@ def config_to_dict(config: AppConfig, base_dir: Path | None = None) -> dict:
         "motionplus": config.motionplus,
         "slots": [{"quick_calibration": o.quick_calibration, "combo": o.combo, "ir_calibration": o.ir_calibration}
                   for o in config.slots],
+        "gamepad": config.gamepad,
     }
 
 

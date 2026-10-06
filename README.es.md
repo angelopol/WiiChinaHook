@@ -37,7 +37,7 @@ DolphinBar o el adaptador. Para volver a Dolphin, detén el servicio.
 ```
 
 - **Mandos:** una tarjeta por slot con botones, acelerómetro, velocidad de giro del
-  MotionPlus, puntero IR, stick del Nunchuk, batería y una vista de **Orientación**:
+  MotionPlus, puntero IR, stick y acelerómetro del Nunchuk, batería y una vista de **Orientación**:
   un Wiimote 3D que sigue al mando real (MotionPlus + gravedad). La dirección no tiene
   referencia absoluta y deriva poco a poco; **Recentrar** convierte la dirección
   actual en "apuntando a la pantalla" (plano) o "botones hacia ti" (agarre de lado).
@@ -51,6 +51,10 @@ DolphinBar o el adaptador. Para volver a Dolphin, detén el servicio.
   libusbK/WinUSB; si no hay ninguno, explica cómo instalarlo con Zadig y ofrece
   abrirlo o descargarlo. **Controlador del adaptador** cambia un adaptador entre libusbK
   y su controlador Bluetooth de Windows sin Zadig (ver más abajo).
+- **Mando Xbox:** modo activo, modificador de modo, un dibujo en vivo del mando Xbox
+  virtual de cada Wiimote (los botones pulsados se iluminan, los gatillos se llenan y los
+  sticks se mueven) y remapeo libre de cada control Xbox en cada uno de los cuatro modos
+  (ver más abajo).
 - **Registro:** registro del servicio en vivo.
 - Interfaz en inglés y español (selector de idioma en la cabecera).
 
@@ -188,6 +192,50 @@ Los adaptadores clon "CSR 4.0" (`0A12:0001`, `bcdDevice 0x8891`) declaran una
 configuración USB alternativa duplicada; Windows se niega a iniciarlos con libusbK,
 WinUSB o UsbDk (Código 10), que es también la razón por la que fallan con el
 passthrough de Dolphin. No están soportados.
+
+## Modos de mando Xbox
+
+Como los cuatro modos de la DolphinBar, WiiChinaHook tiene cuatro modos comunes a todos
+los Wiimotes conectados. Un modo con plantilla Xbox da a cada mando su propio mando Xbox
+360 virtual, así que cualquier juego de Windows compatible con mando puede usarlo; un modo
+vacío solo mantiene DSU/API (para Dolphin). DSU sigue funcionando en todos los modos.
+
+**Cambiar de modo desde el mando:** mantén el modificador (por defecto **B**) y pulsa una
+flecha, en sentido horario: ↑ modo 1, → modo 2, ↓ modo 3, ← modo 4. La flecha no se envía
+al juego y B sigue funcionando como su gatillo. Cada mando hace parpadear tres veces su
+LED N y vibra tantas veces como el número del modo antes de volver a su LED de jugador; una vibración larga extra indica que el modo usa entradas que ese mando
+no tiene (p. ej. botones del Nunchuk sin Nunchuk), que la GUI enumera. El botón POWER del
+Wiimote no se puede usar: el hardware no lo envía. También con
+`wiichinahook gamepad --mode N` o desde la GUI.
+
+El modo 1 empieza con la plantilla de juego (los modos 2–4 empiezan vacíos):
+
+| Xbox | Wiimote / Nunchuk |
+|---|---|
+| Stick izquierdo | Stick del Nunchuk |
+| LB / LT | C / Z |
+| RB / RT | A / B |
+| Stick derecho | Giro del MotionPlus (o el puntero IR) |
+| X / Y / A / B | − / + / 1 / 2 |
+| Start / Back | Home / C y Z juntos (entonces no se envían LB/LT) |
+| Cruceta | Cruceta |
+| Guide, L3, R3 | sin asignar |
+
+Cada control Xbox se puede remapear en la GUI a un botón del Wiimote o del Nunchuk, una
+**sacudida** del Wiimote o del Nunchuk en un eje (lateral, arriba/abajo, delante/atrás;
+en cualquier sentido, porque una sacudida rápida siempre rebota) o una **combinación** de
+hasta tres de ellos a la vez: botones y/o sacudidas, p. ej. A + agitar arriba/abajo. Una
+combinación no envía también sus botones por separado, y las más largas tienen prioridad
+sobre las más cortas que se solapan. La sensibilidad de las sacudidas se ajusta por eje
+para el Wiimote y el Nunchuk (el acelerómetro del Nunchuk no está calibrado), con una
+prueba en vivo en la pestaña que muestra qué eje se disparó y con qué fuerza. El stick
+derecho sigue al giroscopio o al puntero IR, con sensibilidad horizontal y vertical del
+giroscopio por separado, rango IR y zona muerta; el Nunchuk no tiene giroscopio. La vibración de los juegos llega al Wiimote. La configuración se guarda en
+`"gamepad"` dentro de `config.local.json`.
+
+Requiere el controlador **ViGEmBus** (lo instalan DS4Windows/BthPS3 o el instalador que
+incluye `vgamepad`). Su autor ya no lo mantiene, pero funciona en Windows 11. Aún sin
+verificar con hardware: el sentido vertical del stick derecho por IR.
 
 ## Configuración
 

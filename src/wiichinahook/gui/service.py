@@ -23,8 +23,9 @@ class ApiError(RuntimeError):
 class ApiClient:
     """Request/response plus subscription events over one WebSocket."""
 
-    def __init__(self, url, on_event, on_closed=None):
-        self.url, self.on_event, self.on_closed = url, on_event, on_closed
+    def __init__(self, url, on_event, on_closed=None, on_gamepad=None, on_xbox=None):
+        self.url, self.on_event, self.on_closed, self.on_gamepad = url, on_event, on_closed, on_gamepad
+        self.on_xbox = on_xbox
         self.socket = None
         self.reader = None
         self.pending = {}
@@ -44,6 +45,10 @@ class ApiClient:
                         future.set_result(message)
                 elif message.get("event") == "state":
                     self.on_event(message["data"])
+                elif message.get("event") == "gamepad" and self.on_gamepad:
+                    self.on_gamepad(message["data"])
+                elif message.get("event") == "xbox" and self.on_xbox:
+                    self.on_xbox(message["data"])
         except ConnectionClosed:
             pass
         finally:
@@ -83,8 +88,9 @@ def address_in_use(exc: BaseException) -> bool:
 class ServiceRuntime:
     """status: stopped | starting | running | attached | error"""
 
-    def __init__(self, on_state, on_status, runner=run_app):
+    def __init__(self, on_state, on_status, runner=run_app, on_gamepad=None, on_xbox=None):
         self.on_state, self.on_status, self.runner = on_state, on_status, runner
+        self.on_gamepad, self.on_xbox = on_gamepad, on_xbox
         self.task = None
         self.client = None
         self.status = "stopped"
@@ -130,7 +136,7 @@ class ServiceRuntime:
             self.set_status("error", f"{type(exc).__name__}: {exc}")
 
     async def connect(self, url):
-        client = ApiClient(url, self.on_state, self.client_closed)
+        client = ApiClient(url, self.on_state, self.client_closed, self.on_gamepad, self.on_xbox)
         await client.open(timeout=1.0)
         self.client = client
         snapshot = await client.request("subscribe")
