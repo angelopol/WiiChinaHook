@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from .mapping import DEFAULT_CONFIG, MappingEngine, unavailable_bindings, validate_config
+from .mapping import DEFAULT_CONFIG, MappingEngine, mode_type, unavailable_bindings, validate_config
 
 log = logging.getLogger(__name__)
 
@@ -83,12 +83,24 @@ class GamepadHub:
         return self.config["mode"]
 
     @property
+    def mode_type(self):
+        """'xbox', 'dsu' or None (empty) for the active mode."""
+        return mode_type(self.config["modes"][self.mode - 1])
+
+    @property
     def template(self):
-        return self.config["modes"][self.mode - 1]
+        """The active Xbox template, or None in DSU/empty modes."""
+        current = self.config["modes"][self.mode - 1]
+        return current if mode_type(current) == "xbox" else None
+
+    @property
+    def dsu_active(self):
+        return self.mode_type == "dsu"
 
     def status(self):
         return {"mode": self.mode, "modifier": self.config["modifier"],
                 "modes": [t["name"] if t else None for t in self.config["modes"]],
+                "types": [mode_type(t) for t in self.config["modes"]],
                 "pads": sorted(self.pads), "problems": {str(k): v for k, v in self.problems.items() if v},
                 "error": self.error, "config": self.config,
                 "shakes": {"seq": self.shake_seq, "by_slot": {str(k): v for k, v in self.shakes.items()}}}
@@ -206,7 +218,8 @@ class GamepadHub:
             self.close()
         for slot in self.connected:  # check the new template against each remote
             self.problems[slot] = unavailable_bindings(self.template, self.capabilities.get(slot, {}))
-        log.info("Gamepad mode %d (%s)", mode, self.template["name"] if self.template else "empty")
+        current = self.config["modes"][mode - 1]
+        log.info("Gamepad mode %d (%s)", mode, current["name"] if current else "empty")
         for slot in sorted(self.connected):
             self.spawn(self.announce(slot, mode))
         self.changed()

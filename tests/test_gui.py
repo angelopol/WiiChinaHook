@@ -191,3 +191,22 @@ def test_xbox_view_lights_pressed_controls():
     assert thumbs[0].x == xbox_view.LEFT_STICK[0] + xbox_view.STICK_TRAVEL   # left stick pushed right
     inactive = xbox_view.shapes({"active": False, "buttons": ["A"]})
     assert colors(inactive) == colors(idle)
+
+
+def test_gamepad_tab_shows_the_dsu_mode_and_its_guides(tmp_path):
+    pytest.importorskip("flet")
+    from types import SimpleNamespace
+    from wiichinahook.gui.gamepad_tab import GamepadTab, load_guide
+    controller = SimpleNamespace(t=Translator("es"), config=AppConfig(), page=None)
+    tab = GamepadTab(controller)
+    tab.editing = 2                                   # default mode 2 is the DSU mode
+    tab.build()
+    assert tab.mode_type.value == "dsu" and "Dolphin" in tab.guide.value and "Mandos" in tab.guide.value
+    tab.on_status({"mode": 2, "problems": {}})
+    assert tab.view_hint.value == controller.t("gp_view_dsu")
+    assert tab.collect() == {"type": "dsu", "name": "DSU"}
+    tab.editing = 1
+    tab.render_editor()
+    assert tab.mode_type.value == "xbox" and "A" in tab.combos
+    (tmp_path / "x.md").write_text("english", encoding="utf-8")
+    assert load_guide("x", "es", tmp_path) == "english" and load_guide("y", "en", tmp_path) is None

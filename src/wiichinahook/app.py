@@ -16,7 +16,9 @@ async def run_app(config, duration=None):
     tasks = []
     hub = None
     def publish(state):
-        dsu.send_state(state)
+        # DSU carries the remotes in the DSU mode; other modes keep DSU clients
+        # connected but idle, so a game never gets the same remote twice.
+        dsu.send_state(state, active=hub is None or hub.dsu_active)
         if api:
             api.publish(state)
         if hub:

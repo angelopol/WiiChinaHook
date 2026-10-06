@@ -52,7 +52,9 @@ or the adapter at a time. To go back to Dolphin, stop the service.
   libusbK and its Windows Bluetooth driver without Zadig (see below).
 - **Xbox controller:** active mode, mode modifier, a live drawing of each remote's
   virtual Xbox controller (pressed buttons light up, triggers fill, sticks move) and a
-  free remapping of every Xbox control for each of the four modes (see below).
+  free remapping of every Xbox control for each of the four modes (see below). Each
+  mode is Empty, Xbox or DSU; a DSU mode shows the DSU input names and the Dolphin and
+  Cemu guides inside the tab.
 - **Log:** live service log.
 - English and Spanish UI (language selector in the header).
 
@@ -192,9 +194,19 @@ alternate setting; Windows refuses to start them with libusbK, WinUSB or UsbDk (
 ## Xbox controller modes
 
 Like the four modes of the DolphinBar, WiiChinaHook has four modes shared by every
-connected Wiimote. A mode with an Xbox template gives each remote its own virtual Xbox
-360 controller, so any Windows game with controller support can use it; an empty mode
-only keeps DSU/API (for Dolphin). DSU keeps working in every mode.
+connected Wiimote. Each mode has a type:
+
+- **Xbox:** each remote gets its own virtual Xbox 360 controller, so any Windows game
+  with controller support can use it.
+- **DSU:** the remotes go to DSU clients (Dolphin, Cemu) with all their features:
+  buttons, Nunchuk, accelerometer and MotionPlus gyroscope. There is nothing to remap:
+  the emulator binds the inputs. Setup guides: [Dolphin](docs/guides/dolphin.md) ·
+  [Cemu](docs/guides/cemu.md).
+- **Empty:** API only.
+
+The DSU server always lists the connected remotes, but it sends their input only in a
+DSU mode. In the other modes they appear connected and idle, so a game never receives
+the same remote twice (as Xbox and as DSU).
 
 **Switching modes on the remote:** hold the modifier (default **B**) and press an arrow,
 clockwise: ↑ mode 1, → mode 2, ↓ mode 3, ← mode 4. The arrow is not sent to the game,
@@ -204,7 +216,9 @@ rumble means the mode uses inputs that remote lacks (e.g. Nunchuk buttons withou
 Nunchuk), which are listed in the GUI. The Wiimote POWER button cannot be used: the
 hardware does not report it. Also `wiichinahook gamepad --mode N` or the GUI.
 
-Mode 1 starts as the game template (modes 2–4 start empty):
+Mode 1 starts as the Xbox game template, mode 2 as the DSU mode (B + →), and modes 3–4
+start empty. A saved configuration from an earlier version whose mode 2 was empty
+becomes DSU automatically. The game template:
 
 | Xbox | Wiimote / Nunchuk |
 |---|---|
@@ -263,9 +277,10 @@ A legacy `usb:0` together with VID/PID is migrated to VID/PID selection.
 ## Outputs
 
 **DSU:** UDP `127.0.0.1:26760`, protocol 1001, four slots. Add this source in
-Dolphin/Cemu or another DSU client. Do not enable Dolphin's passthrough on the same
-adapter at the same time. DSU is not a real Bluetooth Wiimote: each emulator maps
-the inputs it supports.
+Dolphin/Cemu or another DSU client (step-by-step: [Dolphin](docs/guides/dolphin.md),
+[Cemu](docs/guides/cemu.md)). Input is sent only while a DSU mode is active (mode 2 by
+default). Do not enable Dolphin's passthrough on the same adapter at the same time. DSU
+is not a real Bluetooth Wiimote: each emulator maps the inputs it supports.
 
 - Same button mapping as before.
 - Nunchuk: left stick, C → L1 and Z → L2.

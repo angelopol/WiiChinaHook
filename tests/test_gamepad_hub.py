@@ -155,3 +155,15 @@ async def test_xbox_output_is_published_only_on_change():
     hub.set_mode(3)                       # empty mode
     hub.update(remote(1))
     assert outputs[-1] == {"slot": 1, "active": False}
+
+
+async def test_dsu_mode_has_no_xbox_pads_and_no_problems():
+    hub, _, changes = await make_hub()
+    hub.update(remote(0, nunchuk=False))
+    assert 0 in hub.pads and not hub.dsu_active
+    hub.set_mode(2)                                # default mode 2 is the DSU mode
+    assert hub.dsu_active and hub.template is None and hub.pads == {}
+    hub.update(remote(0, ONE, nunchuk=False))
+    status = hub.status()
+    assert hub.pads == {} and status["types"][:2] == ["xbox", "dsu"] and not status["problems"]
+    hub.close()

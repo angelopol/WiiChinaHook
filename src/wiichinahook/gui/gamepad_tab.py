@@ -1,13 +1,15 @@
-"""'Xbox controller' tab: active mode, modifier and per-mode Wiimote -> Xbox mapping."""
+"""'Xbox controller' tab: active mode, modifier and per-mode Wiimote -> Xbox mapping
+(or the DSU mode, with its button table and the emulator guides)."""
 from __future__ import annotations
 
 import copy
+from pathlib import Path
 
 import flet as ft
 import flet.canvas as cv
 
-from ..gamepad.mapping import (AXIS_GESTURES, BUTTON_SOURCES, BUTTON_TARGETS, GAME_TEMPLATE, MAX_CHORD, MODIFIERS,
-                               SHAKE_AXES, STICK_SOURCES, STICK_TARGETS, validate_config)
+from ..gamepad.mapping import (AXIS_GESTURES, BUTTON_SOURCES, BUTTON_TARGETS, DSU_TEMPLATE, GAME_TEMPLATE, MAX_CHORD,
+                               MODIFIERS, SHAKE_AXES, STICK_SOURCES, STICK_TARGETS, mode_type, validate_config)
 from . import xbox_view
 
 NONE = "none"  # dropdown key for "unassigned"
@@ -15,6 +17,26 @@ TARGET_LABELS = {"DPAD_UP": "D-pad ↑", "DPAD_DOWN": "D-pad ↓", "DPAD_LEFT": 
                  "LEFT_STICK": "Left stick", "RIGHT_STICK": "Right stick"}
 BUTTON_NAMES = {"up": "↑", "down": "↓", "left": "←", "right": "→", "a": "A", "b": "B", "minus": "−",
                 "plus": "+", "home": "Home", "1": "1", "2": "2", "c": "C", "z": "Z"}
+
+# What each input is called on the DSU side (Dolphin/Cemu binding names); see dsu_mapping.py.
+DSU_BUTTONS = [("Wiimote A", "Circle"), ("Wiimote B", "Triangle"), ("Wiimote 1", "Square"),
+               ("Wiimote 2", "Cross"), ("Wiimote −", "Share"), ("Wiimote +", "Options"), ("Wiimote Home", "PS"),
+               ("Wiimote ↑ ↓ ← →", "Pad N / Pad S / Pad W / Pad E"), ("Nunchuk C", "L1"), ("Nunchuk Z", "L2"),
+               ("Nunchuk stick", "Left X± / Left Y±"),
+               ("Accelerometer", "Accel Up/Down/Left/Right/Forward/Backward"),
+               ("MotionPlus", "Gyro Pitch Up/Down, Roll Left/Right, Yaw Left/Right")]
+GUIDES = {"dolphin": "Dolphin", "cemu": "Cemu"}
+GUIDES_DIR = Path(__file__).resolve().parents[3] / "docs" / "guides"
+MODE_TYPES = ("empty", "xbox", "dsu")
+
+
+def load_guide(name, language, directory=GUIDES_DIR):
+    """Guide markdown in the UI language (English fallback), or None outside the repo."""
+    for candidate in (f"{name}.{language}.md", f"{name}.md"):
+        path = directory / candidate
+        if path.is_file():
+            return path.read_text(encoding="utf-8")
+    return None
 
 
 def source_label(source, t):
@@ -94,9 +116,14 @@ class GamepadTab:
     def render_editor(self):
         t = self.t
         template = self.config["modes"][self.editing - 1]
-        self.enabled = ft.Switch(label=t("gp_enabled"), value=template is not None, on_change=self.on_enabled)
-        controls = [self.enabled]
-        if template is not None:
+        kind = mode_type(template) or "empty"
+        self.mode_type = ft.Dropdown(label=t("gp_type"), value=kind, width=260, dense=True,
+                                     options=[ft.DropdownOption(k, t(f"gp_type_{k}")) for k in MODE_TYPES],
+                                     on_select=self.on_type)
+        controls = [self.mode_type]
+        if kind == "dsu":
+            controls += self.dsu_panel(template)
+        elif kind == "xbox":
             self.name = ft.TextField(label=t("gp_name"), value=template["name"], width=240, dense=True)
             self.dropdowns = {}
             rows = []
@@ -143,6 +170,39 @@ class GamepadTab:
                                  ft.TextButton(t("gp_reset"), icon=ft.Icons.RESTART_ALT, on_click=self.on_reset)])]
         self.editor.controls = controls
 
+    def dsu_panel(self, template):
+        t = self.t
+        dsu = self.controller.config.dsu
+        self.name = ft.TextField(label=t("gp_name"), value=template["name"], width=240, dense=True)
+        table = ft.Column(spacing=2, controls=[
+            ft.Row([ft.Text(source, width=170, size=12), ft.Text(target, size=12, selectable=True,
+                                                                  font_family="Consolas")])
+            for source, target in DSU_BUTTONS])
+        self.guide = ft.Markdown("", selectable=True, auto_follow_links=True,
+                                 extension_set=ft.MarkdownExtensionSet.GITHUB_WEB)
+        self.guide_select = ft.Dropdown(label=t("gp_dsu_guide"), value="dolphin", width=200, dense=True,
+                                        options=[ft.DropdownOption(k, v) for k, v in GUIDES.items()],
+                                        on_select=self.on_guide)
+        self.show_guide("dolphin")
+        return [ft.Text(t("gp_dsu_intro", host=dsu.host, port=dsu.port), size=12),
+                ft.Row([self.name, ft.FilledButton(t("gp_save"), icon=ft.Icons.SAVE, on_click=self.on_save)],
+                       wrap=True),
+                ft.Text(t("gp_dsu_table"), weight=ft.FontWeight.W_600),
+                table,
+                ft.Text(t("gp_dsu_limits"), size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                ft.Divider(),
+                self.guide_select,
+                ft.Container(self.guide, padding=12, border_radius=8,
+                             bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST)]
+
+    def show_guide(self, name):
+        text = load_guide(name, self.t.language)
+        self.guide.value = text if text is not None else self.t("gp_dsu_guide_missing", name=f"docs/guides/{name}.md")
+
+    def on_guide(self, e):
+        self.show_guide(e.control.value)
+        self.controller.page.update()
+
     def refresh_header(self):
         t = self.t
         active = self.config["mode"]
@@ -175,6 +235,7 @@ class GamepadTab:
                                  f"{event['g']:.1f} g")
             self.shake_log.value = "   ".join(parts[-4:])
         self.refresh_header()
+        self.draw_xbox()
 
     def on_xbox(self, outputs):
         """Live Xbox output of each slot from the service (only changes arrive)."""
@@ -184,7 +245,12 @@ class GamepadTab:
     def draw_xbox(self):
         output = self.outputs.get(self.view_slot)
         self.xbox_canvas.shapes = xbox_view.shapes(output)
-        self.view_hint.value = self.t("gp_view_live" if output and output.get("active") else "gp_view_idle")
+        if output and output.get("active"):
+            self.view_hint.value = self.t("gp_view_live")
+        elif mode_type(self.config["modes"][self.config["mode"] - 1]) == "dsu":
+            self.view_hint.value = self.t("gp_view_dsu")
+        else:
+            self.view_hint.value = self.t("gp_view_idle")
 
     def on_view_select(self, e):
         self.view_slot = int(e.control.value)
@@ -197,6 +263,8 @@ class GamepadTab:
             return None
         result = copy.deepcopy(template)
         result["name"] = self.name.value
+        if mode_type(template) == "dsu":
+            return result
         for target, selectors in self.combos.items():
             members = []
             for selector in selectors:
@@ -246,9 +314,10 @@ class GamepadTab:
         self.render_editor()
         self.controller.page.update()
 
-    async def on_enabled(self, e):
+    async def on_type(self, e):
         config = copy.deepcopy(self.config)
-        config["modes"][self.editing - 1] = copy.deepcopy(GAME_TEMPLATE) if e.control.value else None
+        fresh = {"xbox": GAME_TEMPLATE, "dsu": DSU_TEMPLATE}.get(e.control.value)
+        config["modes"][self.editing - 1] = copy.deepcopy(fresh) if fresh else None
         if await self.apply(config):
             self.render_editor()
             self.controller.page.update()

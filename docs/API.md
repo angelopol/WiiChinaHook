@@ -18,14 +18,18 @@ JSON over WebSocket at `ws://127.0.0.1:26761`. Each request carries `v`, `id`,
 {"v":1,"id":10,"command":"quick_calibrate","args":{"slot":0}}
 {"v":1,"id":11,"command":"gamepad"}
 {"v":1,"id":12,"command":"gamepad_mode","args":{"mode":1}}
-{"v":1,"id":13,"command":"gamepad_config","args":{"config":{"modifier":"wm_b","mode":1,"modes":[{"buttons":{"A":"wm_a"}},null,null,null]}}}
+{"v":1,"id":13,"command":"gamepad_config","args":{"config":{"modifier":"wm_b","mode":1,"modes":[{"buttons":{"A":"wm_a"}},{"type":"dsu"},null,null]}}}
 ```
 
-`gamepad` returns the Xbox mode status: `mode`, `modifier`, `modes` (template names or
-null), `pads` (slots with a virtual controller), `problems` (per slot, bindings it cannot
+`gamepad` returns the mode status: `mode`, `modifier`, `modes` (template names or
+null), `types` (`"xbox"`, `"dsu"` or null per mode), `pads` (slots with a virtual controller), `problems` (per slot, bindings it cannot
 drive), `error` (e.g. ViGEmBus missing) and the full `config`. `gamepad_mode` switches
 every remote, `gamepad_config` replaces the configuration (validated; unspecified Xbox
-controls are unassigned). Sources: `wm_up/down/left/right/a/b/minus/plus/home/1/2`,
+controls are unassigned). A mode is `null` (empty), an Xbox template (`"type": "xbox"`,
+the default) or `{"type": "dsu", "name": "DSU"}`. DSU clients receive input only while a
+DSU mode is active; in the other modes the slots stay connected with neutral data. A
+configuration without `"version": 2` whose mode 2 is empty gets the DSU mode there.
+Sources: `wm_up/down/left/right/a/b/minus/plus/home/1/2`,
 `nc_c`, `nc_z`, `wm_shake_x/y/z` and `nc_shake_x/y/z` (shake along an axis, either
 direction; the older `*_shake_left/right/up/down/forward/back` are still accepted), or up
 to three of them joined with `+` (buttons and/or shakes); per-template `shake_wm` and

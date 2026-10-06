@@ -18,14 +18,18 @@ y opcionalmente `args`. El servidor responde con el mismo `id` y `ok`.
 {"v":1,"id":10,"command":"quick_calibrate","args":{"slot":0}}
 {"v":1,"id":11,"command":"gamepad"}
 {"v":1,"id":12,"command":"gamepad_mode","args":{"mode":1}}
-{"v":1,"id":13,"command":"gamepad_config","args":{"config":{"modifier":"wm_b","mode":1,"modes":[{"buttons":{"A":"wm_a"}},null,null,null]}}}
+{"v":1,"id":13,"command":"gamepad_config","args":{"config":{"modifier":"wm_b","mode":1,"modes":[{"buttons":{"A":"wm_a"}},{"type":"dsu"},null,null]}}}
 ```
 
-`gamepad` devuelve el estado de los modos Xbox: `mode`, `modifier`, `modes` (nombres de
-plantilla o null), `pads` (slots con mando virtual), `problems` (por slot, asignaciones que
+`gamepad` devuelve el estado de los modos: `mode`, `modifier`, `modes` (nombres de
+plantilla o null), `types` (`"xbox"`, `"dsu"` o null por modo), `pads` (slots con mando virtual), `problems` (por slot, asignaciones que
 no puede usar), `error` (p. ej. falta ViGEmBus) y la `config` completa. `gamepad_mode`
 cambia el modo de todos los mandos y `gamepad_config` reemplaza la configuración (validada;
-los controles Xbox no indicados quedan sin asignar). Fuentes:
+los controles Xbox no indicados quedan sin asignar). Un modo es `null` (vacío), una
+plantilla Xbox (`"type": "xbox"`, por defecto) o `{"type": "dsu", "name": "DSU"}`. Los
+clientes DSU solo reciben entradas mientras hay un modo DSU activo; en los demás modos los
+slots siguen conectados con datos neutros. Una configuración sin `"version": 2` con el modo
+2 vacío recibe ahí el modo DSU. Fuentes:
 `wm_up/down/left/right/a/b/minus/plus/home/1/2`, `nc_c`, `nc_z`,
 `wm_shake_x/y/z` y `nc_shake_x/y/z` (sacudida en un eje, en cualquier sentido; los antiguos
 `*_shake_left/right/up/down/forward/back` se siguen aceptando), o hasta tres de ellos unidos

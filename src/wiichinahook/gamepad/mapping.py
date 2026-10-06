@@ -42,6 +42,7 @@ MAX_CHORD = 3
 MODIFIERS = ("wm_b", "wm_a", "wm_home", "wm_minus", "wm_plus", "wm_1", "wm_2")
 
 GAME_TEMPLATE = {
+    "type": "xbox",
     "name": "Game",
     "buttons": {
         "A": "wm_1", "B": "wm_2", "X": "wm_minus", "Y": "wm_plus",
@@ -60,7 +61,16 @@ GAME_TEMPLATE = {
     "deadzone": 0.08,
 }
 
-DEFAULT_CONFIG = {"modifier": "wm_b", "mode": 1, "modes": [copy.deepcopy(GAME_TEMPLATE), None, None, None]}
+# DSU mode: no virtual Xbox controller; the remotes go to DSU clients (Dolphin, Cemu)
+# with all their features. Other modes keep DSU clients connected but idle.
+DSU_TEMPLATE = {"type": "dsu", "name": "DSU"}
+CONFIG_VERSION = 2
+DEFAULT_CONFIG = {"version": CONFIG_VERSION, "modifier": "wm_b", "mode": 1,
+                  "modes": [copy.deepcopy(GAME_TEMPLATE), copy.deepcopy(DSU_TEMPLATE), None, None]}
+
+
+def mode_type(template):
+    return None if template is None else template.get("type", "xbox")
 
 
 def is_chord(source):
@@ -76,6 +86,11 @@ def validate_template(template: dict) -> dict:
         return None
     if not isinstance(template, dict):
         raise ValueError("A mode template must be an object or null")
+    kind = template.get("type", "xbox")
+    if kind == "dsu":
+        return {"type": "dsu", "name": str(template.get("name") or "DSU")[:40]}
+    if kind != "xbox":
+        raise ValueError("Mode type must be xbox or dsu")
     result = copy.deepcopy(GAME_TEMPLATE)
     if "shake_g" in template:  # configs from before per-axis sensitivity
         result["shake_wm"] = result["shake_nc"] = [template["shake_g"]] * 3
@@ -128,7 +143,10 @@ def validate_config(config: dict | None) -> dict:
         raise ValueError("mode must be 1..4")
     modes = list(config.get("modes", []))[:4]
     modes += [None] * (4 - len(modes))
-    return {"modifier": modifier, "mode": mode, "modes": [validate_template(t) for t in modes]}
+    modes = [validate_template(t) for t in modes]
+    if int(config.get("version", 1)) < 2 and modes[1] is None and "dsu" not in map(mode_type, modes):
+        modes[1] = copy.deepcopy(DSU_TEMPLATE)   # mode 2 became the DSU mode
+    return {"version": CONFIG_VERSION, "modifier": modifier, "mode": mode, "modes": modes}
 
 
 def required_capability(source):
@@ -145,7 +163,7 @@ def required_capability(source):
 
 def unavailable_bindings(template: dict | None, capabilities: dict) -> list[str]:
     """'TARGET: source (needs capability)' for bindings this remote cannot drive."""
-    if template is None:
+    if mode_type(template) != "xbox":
         return []
     problems = []
     bindings = list(template["buttons"].items()) + list(template["sticks"].items())

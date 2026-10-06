@@ -126,8 +126,10 @@ TEXT = {
         "ir_calibration_hint": "While the IR camera sees both sensor bar dots and the remote is roughly "
                                "level, correct the heading drift: pointing at the bar = straight ahead.",
         "tab_gamepad": "Xbox controller",
-        "gp_intro": "Each mode is shared by every connected Wiimote. A mode with an Xbox template gives every "
-                    "remote its own virtual Xbox controller (ViGEmBus); an empty mode only keeps DSU/API. "
+        "gp_intro": "Each mode is shared by every connected Wiimote. An Xbox mode gives every remote its own "
+                    "virtual Xbox controller (ViGEmBus); the DSU mode sends the remotes to DSU emulators (Dolphin, "
+                    "Cemu) with all their features; in the other modes DSU clients see the remotes but get no "
+                    "input. "
                     "Switch modes on the remote: hold the modifier and press an arrow, clockwise "
                     "(↑ 1, → 2, ↓ 3, ← 4); the remote rumbles the mode number.",
         "gp_active": "Active mode:",
@@ -136,7 +138,19 @@ TEXT = {
         "gp_modifier": "Mode modifier",
         "gp_modifier_hint": "The Wiimote POWER button is not reported by the hardware, so it cannot be used.",
         "gp_edit_mode": "Edit",
-        "gp_enabled": "Xbox controller in this mode",
+        "gp_type": "Mode type",
+        "gp_type_empty": "Empty (API only)",
+        "gp_type_xbox": "Xbox controller",
+        "gp_type_dsu": "DSU (Dolphin, Cemu…)",
+        "gp_dsu_intro": "In this mode the remotes go to DSU clients at {host}:{port}: buttons, Nunchuk, "
+                        "accelerometer and MotionPlus gyroscope. There is nothing to remap here; bind the inputs "
+                        "in the emulator (guides below).",
+        "gp_dsu_table": "What each input is called in the emulator",
+        "gp_dsu_limits": "DSU has no IR camera and a single motion sensor per remote: the pointer comes from the "
+                         "gyroscope (bind Recenter in the emulator) and the Nunchuk's motion is not sent.",
+        "gp_dsu_guide": "Guide",
+        "gp_dsu_guide_missing": "Guide not found ({name}); it is in the repository's docs/guides folder.",
+        "gp_view_dsu": "DSU mode: the remotes go to Dolphin/Cemu, no virtual Xbox controller.",
         "gp_name": "Template name",
         "gp_left_stick": "Left stick",
         "gp_right_stick": "Right stick",
@@ -302,8 +316,10 @@ TEXT = {
         "ir_calibration_hint": "Mientras la cámara IR ve los dos puntos de la barra y el mando está más o "
                                "menos nivelado, corrige la deriva del giro: apuntar a la barra = de frente.",
         "tab_gamepad": "Mando Xbox",
-        "gp_intro": "Cada modo es común a todos los Wiimotes conectados. Un modo con plantilla Xbox da a cada "
-                    "mando su propio mando Xbox virtual (ViGEmBus); un modo vacío solo mantiene DSU/API. "
+        "gp_intro": "Cada modo es común a todos los Wiimotes conectados. Un modo Xbox da a cada mando su propio "
+                    "mando Xbox virtual (ViGEmBus); el modo DSU envía los mandos a emuladores DSU (Dolphin, "
+                    "Cemu) con todas sus funciones; en los demás modos los clientes DSU ven los mandos pero no "
+                    "reciben entradas. "
                     "Cambia de modo desde el mando: mantén el modificador y pulsa una flecha, en sentido horario "
                     "(↑ 1, → 2, ↓ 3, ← 4); el mando vibra tantas veces como el número del modo.",
         "gp_active": "Modo activo:",
@@ -312,7 +328,19 @@ TEXT = {
         "gp_modifier": "Modificador de modo",
         "gp_modifier_hint": "El botón POWER del Wiimote no lo envía el hardware, así que no se puede usar.",
         "gp_edit_mode": "Editar",
-        "gp_enabled": "Mando Xbox en este modo",
+        "gp_type": "Tipo de modo",
+        "gp_type_empty": "Vacío (solo API)",
+        "gp_type_xbox": "Mando Xbox",
+        "gp_type_dsu": "DSU (Dolphin, Cemu…)",
+        "gp_dsu_intro": "En este modo los mandos van a los clientes DSU de {host}:{port}: botones, Nunchuk, "
+                        "acelerómetro y giroscopio MotionPlus. Aquí no hay nada que reasignar; las entradas se "
+                        "asignan en el emulador (guías abajo).",
+        "gp_dsu_table": "Cómo se llama cada entrada en el emulador",
+        "gp_dsu_limits": "DSU no lleva la cámara IR y tiene un único sensor de movimiento por mando: el puntero sale "
+                         "del giroscopio (asigna Recenter en el emulador) y el movimiento del Nunchuk no se envía.",
+        "gp_dsu_guide": "Guía",
+        "gp_dsu_guide_missing": "Guía no encontrada ({name}); está en la carpeta docs/guides del repositorio.",
+        "gp_view_dsu": "Modo DSU: los mandos van a Dolphin/Cemu, sin mando Xbox virtual.",
         "gp_name": "Nombre de la plantilla",
         "gp_left_stick": "Stick izquierdo",
         "gp_right_stick": "Stick derecho",

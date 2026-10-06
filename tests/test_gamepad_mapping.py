@@ -2,7 +2,7 @@ import copy
 
 import pytest
 
-from wiichinahook.gamepad.mapping import (GAME_TEMPLATE, MappingEngine, unavailable_bindings, validate_config,
+from wiichinahook.gamepad.mapping import (DEFAULT_CONFIG, GAME_TEMPLATE, MappingEngine, mode_type, unavailable_bindings, validate_config,
                                           validate_template)
 
 B, A, HOME, UP, RIGHT, DOWN, LEFT = 0x0004, 0x0008, 0x0080, 0x0800, 0x0200, 0x0400, 0x0100
@@ -101,7 +101,8 @@ def test_config_validation_and_free_remapping():
                                          "sticks": {"RIGHT_STICK": "ir"}}]})
     assert config["modes"][0]["buttons"]["A"] == "wm_a"
     assert config["modes"][0]["buttons"]["X"] is None            # unspecified = unassigned
-    assert config["modes"][0]["sticks"]["RIGHT_STICK"] == "ir" and config["modes"][1:] == [None] * 3
+    assert config["modes"][0]["sticks"]["RIGHT_STICK"] == "ir" and config["modes"][2:] == [None] * 2
+    assert config["modes"][1] == {"type": "dsu", "name": "DSU"}   # old configs: empty mode 2 becomes DSU
     for bad in ({"modifier": "wm_power"}, {"mode": 5}, {"modes": [{"buttons": {"Z": "wm_a"}}]},
                 {"modes": [{"buttons": {"A": "wm_power"}}]}, {"modes": [{"sticks": {"LEFT_STICK": "wm_a"}}]},
                 {"modes": [{"buttons": {"A": "wm_a+wm_b+wm_1+wm_2"}}]},       # more than three
@@ -170,3 +171,14 @@ def test_old_single_shake_threshold_still_loads():
     assert template["gyro_full_dps_y"] == 300.0
     with pytest.raises(ValueError):
         validate_template({"shake_nc": [1.0, 1.0]})
+
+
+def test_dsu_mode_type_and_migration():
+    assert DEFAULT_CONFIG["modes"][1]["type"] == "dsu" and mode_type(DEFAULT_CONFIG["modes"][0]) == "xbox"
+    current = validate_config({"version": 2, "modes": [None, None, {"type": "dsu"}, None]})
+    assert [mode_type(t) for t in current["modes"]] == [None, None, "dsu", None]   # no re-migration
+    legacy = validate_config({"modes": [None, {"buttons": {"A": "wm_a"}}, None, None]})
+    assert [mode_type(t) for t in legacy["modes"]] == [None, "xbox", None, None]   # mode 2 in use: kept
+    assert unavailable_bindings({"type": "dsu", "name": "DSU"}, {}) == []
+    with pytest.raises(ValueError):
+        validate_template({"type": "keyboard"})

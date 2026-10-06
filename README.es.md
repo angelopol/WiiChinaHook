@@ -54,7 +54,8 @@ DolphinBar o el adaptador. Para volver a Dolphin, detén el servicio.
 - **Mando Xbox:** modo activo, modificador de modo, un dibujo en vivo del mando Xbox
   virtual de cada Wiimote (los botones pulsados se iluminan, los gatillos se llenan y los
   sticks se mueven) y remapeo libre de cada control Xbox en cada uno de los cuatro modos
-  (ver más abajo).
+  (ver más abajo). Cada modo es Vacío, Xbox o DSU; un modo DSU muestra en la propia
+  pestaña los nombres de las entradas DSU y las guías de Dolphin y Cemu.
 - **Registro:** registro del servicio en vivo.
 - Interfaz en inglés y español (selector de idioma en la cabecera).
 
@@ -196,9 +197,19 @@ passthrough de Dolphin. No están soportados.
 ## Modos de mando Xbox
 
 Como los cuatro modos de la DolphinBar, WiiChinaHook tiene cuatro modos comunes a todos
-los Wiimotes conectados. Un modo con plantilla Xbox da a cada mando su propio mando Xbox
-360 virtual, así que cualquier juego de Windows compatible con mando puede usarlo; un modo
-vacío solo mantiene DSU/API (para Dolphin). DSU sigue funcionando en todos los modos.
+los Wiimotes conectados. Cada modo tiene un tipo:
+
+- **Xbox:** cada mando recibe su propio mando Xbox 360 virtual, así que cualquier juego
+  de Windows compatible con mando puede usarlo.
+- **DSU:** los mandos van a los clientes DSU (Dolphin, Cemu) con todas sus funciones:
+  botones, Nunchuk, acelerómetro y giroscopio MotionPlus. No hay nada que reasignar: las
+  entradas se asignan en el emulador. Guías de configuración:
+  [Dolphin](docs/guides/dolphin.es.md) · [Cemu](docs/guides/cemu.es.md).
+- **Vacío:** solo la API.
+
+El servidor DSU siempre anuncia los mandos conectados, pero solo envía sus entradas en un
+modo DSU. En los demás modos aparecen conectados y sin actividad, así que un juego nunca
+recibe el mismo mando dos veces (como Xbox y como DSU).
 
 **Cambiar de modo desde el mando:** mantén el modificador (por defecto **B**) y pulsa una
 flecha, en sentido horario: ↑ modo 1, → modo 2, ↓ modo 3, ← modo 4. La flecha no se envía
@@ -208,7 +219,9 @@ no tiene (p. ej. botones del Nunchuk sin Nunchuk), que la GUI enumera. El botón
 Wiimote no se puede usar: el hardware no lo envía. También con
 `wiichinahook gamepad --mode N` o desde la GUI.
 
-El modo 1 empieza con la plantilla de juego (los modos 2–4 empiezan vacíos):
+El modo 1 empieza con la plantilla Xbox de juego, el modo 2 como modo DSU (B + →) y los
+modos 3–4 vacíos. Una configuración guardada de una versión anterior con el modo 2 vacío
+pasa a DSU automáticamente. La plantilla de juego:
 
 | Xbox | Wiimote / Nunchuk |
 |---|---|
@@ -266,7 +279,9 @@ por VID/PID. `ir: false` y `motionplus: false` permiten aislar problemas.
 ## Salidas
 
 **DSU:** UDP `127.0.0.1:26760`, protocolo 1001, cuatro slots. Configura esta fuente
-en Dolphin/Cemu u otro cliente DSU. No actives simultáneamente el passthrough de
+en Dolphin/Cemu u otro cliente DSU (paso a paso: [Dolphin](docs/guides/dolphin.es.md),
+[Cemu](docs/guides/cemu.es.md)). Las entradas solo se envían mientras está activo un modo
+DSU (el modo 2 por defecto). No actives simultáneamente el passthrough de
 Dolphin sobre este mismo adaptador. DSU no equivale a un Wiimote Bluetooth real:
 cada emulador debe mapear las entradas que admite.
 

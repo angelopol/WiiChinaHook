@@ -132,3 +132,14 @@ def test_port_info_keeps_answering_after_a_client_closes_its_socket():
         server.close()
         client.close()
     assert answered == 10
+
+
+def test_inactive_slots_stay_connected_without_input(server):
+    s = WiimoteState("00:11:22:33:44:55", 0, True)
+    s.buttons, s.accel_g, s.gyro_dps = 0x0008, (1., 2., 3.), (10., 20., 30.)
+    s.nunchuk = {"stick": [1, 1], "c": True, "z": True}
+    idle = server._pad_data_payload(s, active=False)
+    assert idle[11] == 1 and idle[1] == 2               # connected, still announced
+    assert idle[16:20] == bytes(4) and idle[20:24] == bytes([0x80]) * 4
+    assert idle[56:80] == bytes(24)
+    assert server._pad_data_payload(s)[56:80] != bytes(24)

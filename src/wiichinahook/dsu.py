@@ -139,7 +139,9 @@ class DsuServer:
         return struct.pack("<BBBB6sB", slot, 2 if connected else 0, 2 if connected else 0,
                            2 if connected else 0, parse_mac(state.address) if state else bytes(6), battery)
 
-    def send_state(self, state):
+    def send_state(self, state, active=True):
+        """`active=False` keeps clients' devices connected but sends no input (the
+        remote is driving a virtual Xbox controller or the mode is empty)."""
         self.states[state.slot] = state
         now = time.monotonic()
         endpoints = set()
@@ -150,16 +152,16 @@ class DsuServer:
         for endpoint in endpoints:
             key = (endpoint, state.slot)
             counter = self.counters.get(key, 0)
-            self._send(self.builder.build(EVENT_PAD_DATA, self._pad_data_payload(state, counter)), endpoint)
+            self._send(self.builder.build(EVENT_PAD_DATA, self._pad_data_payload(state, counter, active)), endpoint)
             self.counters[key] = (counter + 1) & 0xFFFFFFFF
 
-    def _pad_data_payload(self, state, counter=0):
+    def _pad_data_payload(self, state, counter=0, active=True):
         payload = bytearray(80)
         payload[:11] = self._shared_payload(state.slot, state)
         payload[11] = int(state.connected)
         struct.pack_into("<I", payload, 12, counter)
         payload[20:24] = b"\x80" * 4
-        if not state.connected:
+        if not state.connected or not active:
             return bytes(payload)
         dpad, face, home, analogs = dsu_buttons_from_wiimote(state.buttons)
         analogs = bytearray(analogs)
