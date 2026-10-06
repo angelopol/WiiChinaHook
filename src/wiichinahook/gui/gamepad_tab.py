@@ -26,16 +26,18 @@ DSU_BUTTONS = [("Wiimote A", "Circle"), ("Wiimote B", "Triangle"), ("Wiimote 1",
                ("Accelerometer", "Accel Up/Down/Left/Right/Forward/Backward"),
                ("MotionPlus", "Gyro Pitch Up/Down, Roll Left/Right, Yaw Left/Right")]
 GUIDES = {"dolphin": "Dolphin", "cemu": "Cemu"}
-GUIDES_DIR = Path(__file__).resolve().parents[3] / "docs" / "guides"
+# The release executable bundles docs/guides as gui/guides; a checkout reads the repo's.
+GUIDE_DIRS = (Path(__file__).resolve().parent / "guides", Path(__file__).resolve().parents[3] / "docs" / "guides")
 MODE_TYPES = ("empty", "xbox", "dsu")
 
 
-def load_guide(name, language, directory=GUIDES_DIR):
-    """Guide markdown in the UI language (English fallback), or None outside the repo."""
-    for candidate in (f"{name}.{language}.md", f"{name}.md"):
-        path = directory / candidate
-        if path.is_file():
-            return path.read_text(encoding="utf-8")
+def load_guide(name, language, directories=GUIDE_DIRS):
+    """Guide markdown in the UI language (English fallback), or None if not shipped."""
+    for directory in directories:
+        for candidate in (f"{name}.{language}.md", f"{name}.md"):
+            path = Path(directory) / candidate
+            if path.is_file():
+                return path.read_text(encoding="utf-8")
     return None
 
 

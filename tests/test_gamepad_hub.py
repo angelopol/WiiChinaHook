@@ -167,3 +167,24 @@ async def test_dsu_mode_has_no_xbox_pads_and_no_problems():
     status = hub.status()
     assert hub.pads == {} and status["types"][:2] == ["xbox", "dsu"] and not status["problems"]
     hub.close()
+
+
+def test_xbox_pad_skips_unchanged_updates():
+    from types import SimpleNamespace
+    from wiichinahook.gamepad.mapping import XboxState
+    from wiichinahook.gamepad.xbox import XboxPad
+    calls = []
+    fake = SimpleNamespace(**{name: (lambda name: lambda **kw: calls.append(name))(name) for name in (
+        "press_button", "release_button", "left_trigger_float", "right_trigger_float",
+        "left_joystick_float", "right_joystick_float", "update")})
+    pad = object.__new__(XboxPad)                    # no ViGEm device needed
+    pad.vg = SimpleNamespace(XUSB_BUTTON=SimpleNamespace(XUSB_GAMEPAD_A=1))
+    pad.pad, pad.pressed, pad.last = fake, set(), None
+    state = XboxState()
+    state.buttons.add("A")
+    pad.send(state)
+    pad.send(state)                                  # identical: no driver call
+    assert calls.count("update") == 1
+    state.rx = 0.0001                                # tiny gyro motion still goes out
+    pad.send(state)
+    assert calls.count("update") == 2 and calls.count("press_button") == 1

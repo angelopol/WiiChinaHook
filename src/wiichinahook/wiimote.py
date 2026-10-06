@@ -1,7 +1,7 @@
 """Wiimote wire reports. Vectors retain Wii axes; DSU transforms at its boundary."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 import struct
 import time
 
@@ -54,7 +54,13 @@ class WiimoteState:
     calibration: dict = field(default_factory=dict)
 
     def to_dict(self):
-        return asdict(self)
+        # Hot path (API snapshots): a shallow copy is enough because the parser
+        # replaces tuples, `ir` and `nunchuk` on every report instead of mutating them;
+        # only the two dicts that are updated in place get their own copy.
+        data = dict(self.__dict__)
+        data["capabilities"] = dict(self.capabilities)
+        data["calibration"] = dict(self.calibration)
+        return data
 
     def disconnect(self, error=None):
         self.connected = False

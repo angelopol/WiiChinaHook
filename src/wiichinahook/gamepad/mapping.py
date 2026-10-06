@@ -255,6 +255,7 @@ class MappingEngine:
         self.suppressed = set()        # arrows consumed by a mode switch until released
         self.wm_shake = ShakeDetector()
         self.nc_shake = ShakeDetector()
+        self._compiled_for, self._compiled = None, None
 
     def take_fired(self):
         """Shakes detected since the last call: [(device, axis, g)] for the live test."""
@@ -297,19 +298,15 @@ class MappingEngine:
 
         # Combinations win over their members (C+Z = Select must not also press LB and
         # LT), and longer combinations over shorter overlapping ones.
-        chords = sorted({s for s in template["buttons"].values() if is_chord(s)},
-                        key=lambda s: -len(chord_members(s)))
+        chords, buttons = self.compiled(template)
         consumed, firing = set(), set()
-        for chord in chords:
-            members = chord_members(chord)
-            if all(m in active for m in members) and not consumed & set(members):
+        for chord, members in chords:
+            if members <= active and not consumed & members:
                 firing.add(chord)
-                consumed.update(members)
+                consumed |= members
         out = XboxState()
-        for target, source in template["buttons"].items():
-            if source is None:
-                continue
-            on = source in firing if is_chord(source) else (source in active and source not in consumed)
+        for target, source, chord in buttons:
+            on = source in firing if chord else (source in active and source not in consumed)
             if not on:
                 continue
             if target == "LT":
@@ -325,6 +322,17 @@ class MappingEngine:
             else:
                 out.rx, out.ry = x, y
         return out, mode_request
+
+    def compiled(self, template):
+        """Chords (longest first, as member sets) and the bound buttons of a template,
+        rebuilt only when the template object changes (configs are replaced, not edited)."""
+        if self._compiled_for is not template:
+            chords = sorted({s for s in template["buttons"].values() if is_chord(s)},
+                            key=lambda s: -len(chord_members(s)))
+            self._compiled = ([(c, frozenset(chord_members(c))) for c in chords],
+                              [(t, s, is_chord(s)) for t, s in template["buttons"].items() if s is not None])
+            self._compiled_for = template
+        return self._compiled
 
     @staticmethod
     def stick(source, state, template):

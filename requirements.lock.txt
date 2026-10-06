@@ -31,6 +31,7 @@ pyee==14.0.0
 Pygments==2.21.0
 pyserial-asyncio==0.6
 pyserial==3.5
+pystray==0.19.5
 pytest-asyncio==1.4.0
 pytest==9.1.1
 pyusb==1.3.1

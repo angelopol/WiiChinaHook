@@ -8,6 +8,15 @@ import logging
 from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
 
+MAX_HZ = 60  # state/xbox events per second and slot, at most
+
+
+def stream_hz(value):
+    """Subscriber event rate: 1..60 per second, or 0 to pause state/xbox events."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or not 0 <= value <= MAX_HZ:
+        raise ValueError(f"hz must be 0..{MAX_HZ}")
+    return value
+
 
 class ApiServer:
     def __init__(self, manager, host="127.0.0.1", port=26761):
@@ -26,35 +35,44 @@ class ApiServer:
             await self.server.wait_closed()
 
     def publish(self, state):
-        for pending, wake in self.subscribers.values():
-            pending[state.slot] = state.to_dict()
-            wake.set()
+        # Called for every report (~235/s per remote): keep only a reference to the
+        # live state; it is converted when the subscriber's next batch goes out.
+        for pending, wake, settings in self.subscribers.values():
+            pending[state.slot] = state
+            if settings["hz"]:
+                wake.set()
 
     def publish_xbox(self, output):
-        for pending, wake in self.subscribers.values():
+        for pending, wake, settings in self.subscribers.values():
             pending[f"xbox{output['slot']}"] = output
-            wake.set()
+            if settings["hz"]:
+                wake.set()
 
     def publish_gamepad(self, status):
-        for pending, wake in self.subscribers.values():
+        for pending, wake, settings in self.subscribers.values():
             pending["gamepad"] = status
-            wake.set()
+            wake.set()                       # mode changes go out even when paused
 
     async def handle(self, socket):
         lock = asyncio.Lock()
         async def send(data):
             async with lock:
                 await asyncio.wait_for(socket.send(json.dumps(data)), 5)
-        pending, wake = {}, asyncio.Event()
+        pending, wake, settings = {}, asyncio.Event(), {"hz": MAX_HZ}
         async def stream():
             while True:
                 await wake.wait()
-                await asyncio.sleep(1 / 60)
-                batch = list(pending.items())
-                pending.clear()
+                await asyncio.sleep(1 / (settings["hz"] or MAX_HZ))
                 wake.clear()
+                if settings["hz"]:
+                    batch = list(pending.items())
+                    pending.clear()
+                else:                        # paused: only mode/status changes
+                    batch = [("gamepad", pending.pop("gamepad"))] if "gamepad" in pending else []
                 for key, data in batch:
                     event = "gamepad" if key == "gamepad" else "xbox" if str(key).startswith("xbox") else "state"
+                    if event == "state":
+                        data = data.to_dict()
                     await send({"v": 1, "event": event, "data": data})
         sender = None
         try:
@@ -73,9 +91,14 @@ class ApiServer:
                     args = request.get("args", {})
                     if not isinstance(args, dict):
                         raise ValueError("args must be an object")
-                    if command == "subscribe":
+                    if command in ("subscribe", "stream_rate") and "hz" in args:
+                        settings["hz"] = stream_hz(args["hz"])
+                        wake.set()                   # resume with the latest state
+                    if command == "stream_rate":
+                        result = {"hz": settings["hz"]}
+                    elif command == "subscribe":
                         if sender is None:
-                            self.subscribers[socket] = (pending, wake)
+                            self.subscribers[socket] = (pending, wake, settings)
                             sender = asyncio.create_task(stream())
                             # If a slow/broken sender fails, close its socket to stop the handler.
                             sender.add_done_callback(lambda t: asyncio.create_task(socket.close()) if not t.cancelled() and t.exception() else None)

@@ -198,3 +198,38 @@ async def test_pairing_retries_inquiry_while_a_page_is_in_progress(tmp_path):
     assert len(attempts) == 3 and time.monotonic() < manager.pair_until
     manager.pair_task.cancel()
     await asyncio.gather(manager.pair_task, return_exceptions=True)
+
+
+async def test_stream_rate_pauses_live_state_but_not_mode_changes():
+    manager=WiimoteManager(AppConfig(),lambda s:None)
+    api=await ApiServer(manager,port=0).start()
+    port=api.server.sockets[0].getsockname()[1]
+    try:
+        async with connect(f'ws://127.0.0.1:{port}') as ws:
+            await ws.send(json.dumps({"v":1,"id":1,"command":"subscribe","args":{"hz":0}}))
+            assert json.loads(await ws.recv())["ok"]
+            state=WiimoteState("00:11:22:33:44:55",1,True)
+            api.publish(state)
+            api.publish_gamepad({"mode":2})
+            reply=json.loads(await asyncio.wait_for(ws.recv(),1))
+            assert reply["event"] == "gamepad"                     # the state stays queued
+            with pytest.raises(TimeoutError):
+                await asyncio.wait_for(ws.recv(),0.2)
+            state.buttons=8                                        # latest state wins on resume
+            await ws.send(json.dumps({"v":1,"id":2,"command":"stream_rate","args":{"hz":30}}))
+            replies=[json.loads(await asyncio.wait_for(ws.recv(),1)) for _ in range(2)]
+            assert replies[0]["result"] == {"hz":30}
+            assert replies[1]["event"] == "state" and replies[1]["data"]["buttons"] == 8
+            await ws.send(json.dumps({"v":1,"id":3,"command":"stream_rate","args":{"hz":500}}))
+            assert not json.loads(await ws.recv())["ok"]
+    finally:
+        await api.close()
+
+
+def test_state_snapshot_is_independent_of_later_updates():
+    state=WiimoteState("00:11:22:33:44:55",0,True)
+    snap=state.to_dict()
+    state.capabilities["nunchuk"]=True
+    state.calibration["heading"]="ir"
+    assert snap["capabilities"]["nunchuk"] is False and "heading" not in snap["calibration"]
+    assert json.loads(json.dumps(snap))["address"] == "00:11:22:33:44:55"

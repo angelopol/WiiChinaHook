@@ -28,7 +28,7 @@ cambia el modo de todos los mandos y `gamepad_config` reemplaza la configuració
 los controles Xbox no indicados quedan sin asignar). Un modo es `null` (vacío), una
 plantilla Xbox (`"type": "xbox"`, por defecto) o `{"type": "dsu", "name": "DSU"}`. Los
 clientes DSU solo reciben entradas mientras hay un modo DSU activo; en los demás modos los
-slots siguen conectados con datos neutros. Una configuración sin `"version": 2` con el modo
+slots siguen conectados con datos neutros (10 paquetes por segundo en vez de uno por reporte). Una configuración sin `"version": 2` con el modo
 2 vacío recibe ahí el modo DSU. Fuentes:
 `wm_up/down/left/right/a/b/minus/plus/home/1/2`, `nc_c`, `nc_z`,
 `wm_shake_x/y/z` y `nc_shake_x/y/z` (sacudida en un eje, en cualquier sentido; los antiguos
@@ -41,6 +41,11 @@ giroscopio. El campo `shakes` del estado (`seq` y los últimos eventos por slot 
 o sus avisos, y
 `{"event":"xbox","data":{"slot":0,"active":true,"buttons":["A"],"lt":0,"rt":1,"lx":0,"ly":0,"rx":0,"ry":0}}`
 cada vez que cambia la salida del mando virtual de un slot (`"active": false` si no tiene).
+
+`subscribe` acepta `"args": {"hz": N}` y `stream_rate` (`{"hz": N}`) lo cambia después: como
+máximo N eventos `state`/`xbox` por segundo y slot (1–60, por defecto 60), o 0 para
+pausarlos mientras los eventos `gamepad` siguen llegando; al reanudar se envía el estado
+más reciente. La GUI usa 30, y 0 mientras está oculta en la bandeja.
 
 `slot_options` cambia en vivo las opciones de calibración rápida y por barra sensora de un
 slot (solo los campos indicados; la respuesta los incluye todos) y `quick_calibrate`

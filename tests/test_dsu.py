@@ -143,3 +143,16 @@ def test_inactive_slots_stay_connected_without_input(server):
     assert idle[16:20] == bytes(4) and idle[20:24] == bytes([0x80]) * 4
     assert idle[56:80] == bytes(24)
     assert server._pad_data_payload(s)[56:80] != bytes(24)
+
+
+def test_idle_slots_are_sent_at_a_low_rate(server, monkeypatch):
+    sent = []
+    monkeypatch.setattr(server, "_send", lambda packet, endpoint: sent.append(packet))
+    server.clients[(("127.0.0.1", 9), 0, 0, bytes(6))] = time.monotonic()
+    s = WiimoteState("00:11:22:33:44:55", 0, True)
+    for _ in range(50):                      # a burst of reports within a few ms
+        server.send_state(s, active=False)
+    assert len(sent) == 1
+    for _ in range(50):
+        server.send_state(s)                 # DSU mode: every report goes out
+    assert len(sent) == 51

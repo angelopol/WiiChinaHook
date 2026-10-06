@@ -27,7 +27,7 @@ drive), `error` (e.g. ViGEmBus missing) and the full `config`. `gamepad_mode` sw
 every remote, `gamepad_config` replaces the configuration (validated; unspecified Xbox
 controls are unassigned). A mode is `null` (empty), an Xbox template (`"type": "xbox"`,
 the default) or `{"type": "dsu", "name": "DSU"}`. DSU clients receive input only while a
-DSU mode is active; in the other modes the slots stay connected with neutral data. A
+DSU mode is active; in the other modes the slots stay connected with neutral data (10 packets per second instead of every report). A
 configuration without `"version": 2` whose mode 2 is empty gets the DSU mode there.
 Sources: `wm_up/down/left/right/a/b/minus/plus/home/1/2`,
 `nc_c`, `nc_z`, `wm_shake_x/y/z` and `nc_shake_x/y/z` (shake along an axis, either
@@ -39,6 +39,11 @@ with `device`, `axis`, `g`) is meant for tuning; sticks `nc_stick`, `gyro`, `ir`
 `{"event":"gamepad","data":...}` arrives whenever the mode or its warnings change, and
 `{"event":"xbox","data":{"slot":0,"active":true,"buttons":["A"],"lt":0,"rt":1,"lx":0,"ly":0,"rx":0,"ry":0}}`
 whenever a slot's virtual controller output changes (`"active": false` when it has none).
+
+`subscribe` accepts `"args": {"hz": N}` and `stream_rate` (`{"hz": N}`) changes it later:
+at most N `state`/`xbox` events per second and slot (1–60, default 60), or 0 to pause them
+while `gamepad` events keep arriving; on resume the latest state is sent. The GUI uses 30,
+and 0 while it is hidden in the tray.
 
 `slot_options` changes a slot's quick/sensor-bar calibration options live (only the
 given fields; the reply has all of them) and `quick_calibrate` runs the same quick

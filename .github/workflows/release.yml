@@ -1,0 +1,137 @@
+# Publishes a GitHub release automatically.
+#
+# On every push to main, the version in src/wiichinahook/__init__.py is compared with
+# the existing tags. A version without a v<version> tag yet gets tested, built and
+# released, and the tag is created on that commit. So releasing = bump the version
+# (in __init__.py and pyproject.toml) and push to main. Pushes that keep the version
+# publish nothing.
+#
+# Also: pushing a tag v<version> by hand (it must match the version) or running the
+# workflow manually (Actions -> Release -> Run workflow) does the same.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      publish: ${{ steps.check.outputs.publish }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Decide whether this commit is a new release
+        id: check
+        shell: bash
+        run: |
+          version=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' src/wiichinahook/__init__.py)
+          project=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml)
+          if [ -z "$version" ] || [ "$version" != "$project" ]; then
+            echo "::error::__init__.py says '$version' but pyproject.toml says '$project'"; exit 1
+          fi
+          tag="v$version"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            if [ "${GITHUB_REF_NAME}" != "$tag" ]; then
+              echo "::error::Tag ${GITHUB_REF_NAME} does not match version $version"; exit 1
+            fi
+            publish=true                      # a hand-made tag: (re)publish its release
+          elif git ls-remote --exit-code --tags origin "refs/tags/$tag" > /dev/null; then
+            publish=false                     # this version is already released
+            echo "Version $version already has tag $tag: nothing to release."
+          else
+            publish=true
+          fi
+          case "$version" in *a*|*b*|*rc*|*dev*) prerelease=true ;; *) prerelease=false ;; esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "Version $version · publish=$publish · prerelease=$prerelease"
+
+  test:
+    needs: version
+    if: needs.version.outputs.publish == 'true'
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    needs: [version, test]
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          architecture: x64
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Skip vgamepad's ViGEmBus installer   # see ci.yml
+        shell: pwsh
+        run: |
+          $key = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\WiiChinaHookCI-ViGEmBus"
+          New-Item -Path $key -Force | Out-Null
+          New-ItemProperty -Path $key -Name DisplayName -Value "Nefarius Virtual Gamepad Emulation Bus Driver" -Force | Out-Null
+          New-ItemProperty -Path $key -Name DisplayVersion -Value "1.17.333.0" -Force | Out-Null
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[gui,release]"
+
+      - name: Build
+        shell: pwsh
+        run: tools/build_release.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WiiChinaHook-${{ needs.version.outputs.version }}-win64
+          path: |
+            dist/*.zip
+            dist/*.sha256
+
+      - name: Release notes
+        shell: pwsh
+        run: |
+          $v = "${{ needs.version.outputs.version }}"
+          $sha = (Get-Content "dist/WiiChinaHook-$v-win64.zip.sha256").Split(" ")[0]
+          $repo = "https://github.com/${{ github.repository }}/blob/v$v"
+          $notes = @(
+            "## Download",
+            "",
+            "**WiiChinaHook-$v-win64.zip**: unzip anywhere and run ``WiiChinaHook.exe`` (no Python needed). Tested on Windows 11 64-bit.",
+            "",
+            "- Xbox modes need the [ViGEmBus](https://github.com/nefarius/ViGEmBus/releases) driver.",
+            "- The executable is not code-signed: if SmartScreen warns, choose *More info* → *Run anyway*.",
+            "- Setup guides: [Dolphin]($repo/docs/guides/dolphin.md) · [Cemu]($repo/docs/guides/cemu.md)",
+            "",
+            "SHA-256: ``$sha``",
+            ""
+          )
+          $notes -join "`n" | Out-File -Encoding utf8 release-notes.md
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: WiiChinaHook v${{ needs.version.outputs.version }}
+          body_path: release-notes.md
+          generate_release_notes: true      # appends the changes since the last release
+          prerelease: ${{ needs.version.outputs.prerelease == 'true' }}
+          files: |
+            dist/*.zip
+            dist/*.sha256

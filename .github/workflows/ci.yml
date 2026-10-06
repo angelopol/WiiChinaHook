@@ -1,0 +1,45 @@
+# Tests on every push and pull request (Windows, like the app).
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_call:      # reused by the release workflow before it builds
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          architecture: x64
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      # vgamepad 0.1.0 is source-only and its setup.py launches the interactive
+      # ViGEmBus installer (msiexec /i) unless the driver is registered, which would
+      # hang the runner. Register a placeholder entry so it skips that; tests use fake
+      # pads and never need the driver.
+      - name: Skip vgamepad's ViGEmBus installer
+        shell: pwsh
+        run: |
+          $key = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\WiiChinaHookCI-ViGEmBus"
+          New-Item -Path $key -Force | Out-Null
+          New-ItemProperty -Path $key -Name DisplayName -Value "Nefarius Virtual Gamepad Emulation Bus Driver" -Force | Out-Null
+          New-ItemProperty -Path $key -Name DisplayVersion -Value "1.17.333.0" -Force | Out-Null
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[gui,test]"
+
+      - name: Test
+        run: python -m pytest -q

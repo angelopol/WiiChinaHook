@@ -209,4 +209,4 @@ def test_gamepad_tab_shows_the_dsu_mode_and_its_guides(tmp_path):
     tab.render_editor()
     assert tab.mode_type.value == "xbox" and "A" in tab.combos
     (tmp_path / "x.md").write_text("english", encoding="utf-8")
-    assert load_guide("x", "es", tmp_path) == "english" and load_guide("y", "en", tmp_path) is None
+    assert load_guide("x", "es", [tmp_path]) == "english" and load_guide("y", "en", [tmp_path]) is None

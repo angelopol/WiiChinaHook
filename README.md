@@ -12,9 +12,38 @@ local WebSocket API. Dolphin does not need to be running. Two connection modes:
 | `bluetooth` | USB Bluetooth adapter with **libusbK** (e.g. Intel `8087:0A2A`) | Own passthrough built on Bumble; the adapter is reserved while running |
 
 A graphical app (Flet) configures both modes and shows every controller live,
-including a 3D view of the Wiimote's orientation.
+including a 3D view of the Wiimote's orientation. It can also send the remotes to
+Dolphin and Cemu over DSU ([Dolphin guide](docs/guides/dolphin.md),
+[Cemu guide](docs/guides/cemu.md)) or turn them into virtual Xbox controllers.
 
-## Installation
+**Tested on Windows 11 64-bit (x64).** Other Windows versions are untested.
+
+## Download
+
+Get `WiiChinaHook-<version>-win64.zip` from the
+[Releases page](https://github.com/angelopol/WiiChinaHook/releases). Unzip it anywhere
+(e.g. `C:\Apps\WiiChinaHook`) and run `WiiChinaHook.exe`. No Python is needed. Settings
+are saved in `%APPDATA%\WiiChinaHook`. The Xbox modes also need the
+[ViGEmBus](https://github.com/nefarius/ViGEmBus/releases) driver. The executable is not
+code-signed, so Windows SmartScreen may warn on first launch (*More info* → *Run
+anyway*). Each release lists the zip's SHA-256 so you can check the download.
+
+**Publishing releases is automatic.** Bump the version in `src/wiichinahook/__init__.py`
+and `pyproject.toml` (both the same, e.g. `0.3.1`) and push to `main`. The
+[Release workflow](.github/workflows/release.yml) sees a version without a tag yet and:
+
+1. runs the tests;
+2. builds the executable with `tools/build_release.ps1`;
+3. creates tag `v0.3.1` on that commit;
+4. publishes the GitHub release, with the zip, its SHA-256 and the changes since the
+   previous release.
+
+Pushes that keep the version publish nothing. Versions such as `0.4.0rc1` are
+published as pre-releases. [CI](.github/workflows/ci.yml) runs the tests on every push
+and pull request. To build locally: `pip install -e .[gui,release]`, then
+`powershell -ExecutionPolicy Bypass -File tools\build_release.ps1`.
+
+## Installation from source
 
 Tested with Python 3.13 x64; Python 3.11 or later is required.
 
@@ -45,6 +74,12 @@ or the adapter at a time. To go back to Dolphin, stop the service.
   scale calibration and forget are one click away; in Bluetooth mode a pairing panel
   appears. Each card also has the per-remote **quick calibration** and **sensor bar
   calibration** switches (see below).
+- **Tray icon:** the app lives in the notification area (next to the clock). Click the
+  icon to open the window. Right-click it to open the window, switch the mode (1–4) or
+  exit. Closing the window keeps the app running in the tray. To quit, use *Exit*.
+- **Settings → App:** *Start with Windows* (a per-user startup entry, no admin
+  rights; it starts hidden in the tray), *Start minimized to the tray*, *Closing the
+  window keeps it in the tray* and *Start the service when the app opens*.
 - **Settings:** connection mode, DSU/API ports, IR and MotionPlus switches, saved to
   `config.local.json`. In Bluetooth mode the app lists the adapters that use the
   libusbK/WinUSB driver; if there is none it explains how to install one with Zadig
@@ -319,7 +354,7 @@ certification. See [docs/VALIDATION.md](docs/VALIDATION.md) for physical checks.
 
 ## Limitations of this version
 
-No speaker, Windows virtual gamepad or accessories other than the Nunchuk. Basic
+No speaker or accessories other than the Nunchuk. Basic
 four-point IR only (no camera image). The orientation heading drifts (no magnetometer)
 and the clone's nominal MotionPlus scale is too high (~1.3–1.85×) until the scale
 calibration is run on each axis. Clone quirks are added when reproduced, not through PIN
@@ -331,3 +366,9 @@ Protocol references:
 [MotionPlus](https://wiibrew.org/wiki/Wiimote/Extension_Controllers/Wii_Motion_Plus),
 [Nunchuk](https://wiibrew.org/wiki/Wiimote/Extension_Controllers/Nunchuck),
 [DSU](https://v1993.github.io/cemuhook-protocol/).
+
+## License
+
+[MIT](LICENSE). The release executables bundle third-party components under their own
+licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). WiiChinaHook is not
+affiliated with Nintendo, Microsoft, Mayflash or the Dolphin project.

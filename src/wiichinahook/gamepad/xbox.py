@@ -27,6 +27,7 @@ class XboxPad:
         self.vg = vgamepad
         self.pad = vgamepad.VX360Gamepad()
         self.pressed = set()
+        self.last = None
         self.on_rumble = on_rumble
         if on_rumble:
             self.pad.register_notification(callback_function=self._notification)
@@ -35,6 +36,12 @@ class XboxPad:
         self.on_rumble(large_motor, small_motor)
 
     def send(self, state):
+        # Every report lands here (~235/s); a ViGEm update is a driver call, so skip
+        # it when nothing changed (exact values: gyro aiming keeps full resolution).
+        key = (frozenset(state.buttons), state.lt, state.rt, state.lx, state.ly, state.rx, state.ry)
+        if key == self.last:
+            return
+        self.last = key
         for name in state.buttons - self.pressed:
             self.pad.press_button(button=getattr(self.vg.XUSB_BUTTON, BUTTON_NAMES[name]))
         for name in self.pressed - state.buttons:
@@ -74,6 +81,7 @@ class GamepadHub:
         self.loop = loop
         self.engines, self.pads, self.problems, self.connected = {}, {}, {}, set()
         self.capabilities = {}
+        self.problem_keys = {}
         self.shakes, self.shake_seq = {}, 0   # last shakes per slot, for the GUI's live test
         self.error = None
         self.tasks = set()
@@ -149,10 +157,14 @@ class GamepadHub:
             self.report_output(slot, None)
             return
         self.report_output(slot, output)
-        problems = unavailable_bindings(template, state.capabilities)
-        if problems != self.problems.get(slot):
-            self.problems[slot] = problems
-            self.changed()
+        # Capabilities change rarely (extension plugged/unplugged): recheck only then.
+        key = (id(template), tuple(state.capabilities.items()))
+        if self.problem_keys.get(slot) != key:
+            self.problem_keys[slot] = key
+            problems = unavailable_bindings(template, state.capabilities)
+            if problems != self.problems.get(slot):
+                self.problems[slot] = problems
+                self.changed()
         pad = self.pads.get(slot) or self.open_pad(slot)
         if pad is not None:
             try:

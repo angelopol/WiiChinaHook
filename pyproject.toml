@@ -1,9 +1,22 @@
 [project]
 name = "wiichinahook"
-version = "0.2.0"
-description = "Wiimote clone DSU hook for Windows using a DolphinBar or PyUSB and Bumble."
+version = "0.3.0"
+description = "Wiimote clones on Windows (DolphinBar or Bluetooth passthrough) for Dolphin, Cemu (DSU) and Xbox games."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
+authors = [{name = "Angelo Polgrossi"}]
 requires-python = ">=3.11"
+classifiers = [
+    "Operating System :: Microsoft :: Windows :: Windows 11",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Games/Entertainment",
+    "Topic :: System :: Hardware :: Universal Serial Bus (USB) :: Human Interface Device (HID)",
+]
+
+[project.urls]
+Homepage = "https://github.com/angelopol/WiiChinaHook"
+Releases = "https://github.com/angelopol/WiiChinaHook/releases"
 dependencies = [
     "bumble==0.0.235",
     "pyusb==1.3.1",
@@ -16,12 +29,15 @@ dependencies = [
 
 [project.scripts]
 wiichinahook = "wiichinahook.cli:main"
-wiichinahook-gui = "wiichinahook.gui.app:main"
+
+[project.gui-scripts]
+wiichinahook-gui = "wiichinahook.gui.app:main"  # no console window
 
 [project.optional-dependencies]
 test = ["pytest==9.1.1", "pytest-asyncio==1.4.0"]
-gui = ["flet==1.0.3", "flet-desktop==1.0.3"]
-dev = ["pillow==12.3.0"]  # tools/make_calibration_gifs.py
+gui = ["flet==1.0.3", "flet-desktop==1.0.3", "pystray==0.19.5", "pillow==12.3.0"]  # pystray/Pillow: tray icon
+dev = ["pillow==12.3.0"]  # tools/make_calibration_gifs.py, tools/make_icon.py
+release = ["flet-cli==1.0.3", "pyinstaller==6.22.3"]  # tools/build_release.ps1
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -29,7 +45,7 @@ pythonpath = ["src"]
 asyncio_mode = "auto"
 
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
@@ -39,4 +55,4 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-wiichinahook = ["gui/assets/*.gif"]
+wiichinahook = ["gui/assets/*.gif", "gui/assets/icon.*"]

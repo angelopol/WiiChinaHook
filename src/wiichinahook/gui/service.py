@@ -95,6 +95,7 @@ class ServiceRuntime:
         self.client = None
         self.status = "stopped"
         self.error = None
+        self.stream_hz = 60   # live events per second and slot; 0 pauses them
 
     def set_status(self, status, error=None):
         self.status, self.error = status, error
@@ -139,7 +140,7 @@ class ServiceRuntime:
         client = ApiClient(url, self.on_state, self.client_closed, self.on_gamepad, self.on_xbox)
         await client.open(timeout=1.0)
         self.client = client
-        snapshot = await client.request("subscribe")
+        snapshot = await client.request("subscribe", hz=self.stream_hz)
         for state in snapshot.get("devices", []):
             self.on_state(state)
 
@@ -171,6 +172,15 @@ class ServiceRuntime:
         if self.client is None:
             raise ApiError("Service is not running")
         return await self.client.request(command, **args)
+
+    async def set_stream_rate(self, hz):
+        """Throttle live events (e.g. 0 while the window is hidden in the tray)."""
+        self.stream_hz = hz
+        if self.client is not None:
+            try:
+                await self.client.request("stream_rate", hz=hz)
+            except Exception as exc:  # an older attached service: keep its default rate
+                logging.getLogger(__name__).debug("stream_rate: %s", exc)
 
     async def snapshot(self):
         return await self.request("devices")

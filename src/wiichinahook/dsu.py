@@ -1,6 +1,7 @@
 """DSU v1001: one socket, independent subscriptions and four real slot states."""
 from __future__ import annotations
 
+import functools
 import os
 import random
 import socket
@@ -12,6 +13,7 @@ from .dsu_mapping import dsu_buttons_from_wiimote
 from .wiimote import WiimoteState
 
 PROTOCOL_VERSION = 1001
+IDLE_HZ = 10  # neutral packets per second for slots outside the DSU mode
 EVENT_PROTOCOL_VERSION = 0x100000
 EVENT_PORT_INFO = 0x100001
 EVENT_PAD_DATA = 0x100002
@@ -61,6 +63,7 @@ def disable_udp_connreset(sock):
                            None, 0, ctypes.byref(returned), None, None) == 0
 
 
+@functools.lru_cache(maxsize=64)
 def parse_mac(mac):
     raw = bytes.fromhex(mac.replace(":", "").replace("-", ""))
     if len(raw) != 6:
@@ -74,6 +77,7 @@ class DsuServer:
         self.states = {}
         self.clients = {}  # (endpoint, flags, slot, MAC) -> last subscription
         self.counters = {}
+        self.idle_sent = {}
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setblocking(False)
         try:
@@ -141,9 +145,14 @@ class DsuServer:
 
     def send_state(self, state, active=True):
         """`active=False` keeps clients' devices connected but sends no input (the
-        remote is driving a virtual Xbox controller or the mode is empty)."""
+        remote is driving a virtual Xbox controller or the mode is empty); those
+        neutral packets go out at IDLE_HZ instead of the report rate."""
         self.states[state.slot] = state
         now = time.monotonic()
+        if not active and state.connected:
+            if now - self.idle_sent.get(state.slot, 0.0) < 1 / IDLE_HZ:
+                return
+            self.idle_sent[state.slot] = now
         endpoints = set()
         for (endpoint, flags, slot, mac), seen in self.clients.items():
             if now - seen < 5 and (flags == 0 or flags & 1 and slot == state.slot or

@@ -2,17 +2,20 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 from dataclasses import replace
 import collections
 import json
 import logging
 import os
 from pathlib import Path
+import sys
 import webbrowser
 
 import flet as ft
 import flet.canvas as cv
 
+from .. import autostart
 from ..config import COMBOS, AppConfig, SlotOptions, load_config, parse_int, save_config
 from ..orientation import from_axis_angle, multiply, reference_yaw
 from .i18n import LANGUAGES, Translator
@@ -20,12 +23,18 @@ from .model import (BUTTONS, BUTTON_LABELS, bar_value, config_from_form, fmt, fo
                     ir_to_canvas, led_mask, pressed_buttons, stick_to_canvas)
 from .service import ServiceRuntime
 from .gamepad_tab import GamepadTab
+from .tray import Tray
 from .wiimote3d import project
 from ..drivers import choose, packages_for, switch_adapter
 from ..usb_drivers import ZADIG_URL, find_zadig, list_adapters
 
 log = logging.getLogger(__name__)
 REFRESH_HZ = 15
+TAB_CONTROLLERS, TAB_SETTINGS, TAB_GAMEPAD, TAB_LOG = range(4)
+STREAM_HZ = 2 * REFRESH_HZ  # live events requested while the window is visible
+ASSETS = Path(__file__).parent / "assets"
+# App behaviour preferences (gui.json) and their defaults.
+APP_PREFS = {"start_minimized": False, "close_to_tray": True, "start_service": True}
 STATUS_COLORS = {"stopped": ft.Colors.GREY, "starting": ft.Colors.AMBER, "running": ft.Colors.GREEN,
                  "attached": ft.Colors.BLUE, "error": ft.Colors.RED}
 IR_W, IR_H, STICK = 176, 132, 84
@@ -282,6 +291,7 @@ class Controller:
         self.config = self.load_config()
         self.states = {}
         self.dirty = set()
+        self.tab_index = 0
         self.service_mode = None
         self.logs = LogBuffer()
         logging.getLogger().addHandler(self.logs)
@@ -289,16 +299,24 @@ class Controller:
         self.log_version = -1
         self.runtime = ServiceRuntime(self.on_state, self.on_status, on_gamepad=self.on_gamepad,
                                       on_xbox=self.on_xbox)
+        self.runtime.stream_hz = STREAM_HZ
         self.xbox_outputs = {}
         self.gamepad_tab = None
         self.gamepad_status = None
         self.cards = []
         self.closing = False
+        self.tray = None
+        self.visible = True
+        self.tray_mode = None
 
     # -- persistence -------------------------------------------------------
     def load_prefs(self):
+        return self.read_prefs(self.prefs_path)
+
+    @staticmethod
+    def read_prefs(path):
         try:
-            return json.loads(self.prefs_path.read_text(encoding="utf-8"))
+            return json.loads(Path(path).read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return {}
 
@@ -309,8 +327,8 @@ class Controller:
     def load_config(self):
         try:
             return load_config(self.config_path)
-        except FileNotFoundError:
-            return AppConfig()
+        except FileNotFoundError:  # first run: keep state next to the config file
+            return AppConfig(state_dir=self.config_path.parent / ".wiichinahook")
         except (ValueError, KeyError) as exc:
             log.warning("Ignoring invalid %s: %s", self.config_path, exc)
             return AppConfig()
@@ -327,6 +345,9 @@ class Controller:
     def on_gamepad(self, status):
         self.gamepad_status = status
         self.dirty.add("gamepad")
+        if self.tray and status.get("mode") != self.tray_mode:
+            self.tray_mode = status.get("mode")
+            self.tray.refresh()
 
     async def update_gamepad(self, gamepad):
         """Save the Xbox modes and apply them to the running service at once."""
@@ -382,7 +403,8 @@ class Controller:
             ft.Row([ft.TextButton(t("clear_log"), on_click=self.on_clear_log)]), self.log_view])
         self.gamepad_tab = GamepadTab(self)
         gamepad = self.gamepad_tab.build()
-        tabs = ft.Tabs(length=4, expand=True, content=ft.Column(expand=True, controls=[
+        tabs = ft.Tabs(length=4, expand=True, selected_index=self.tab_index, on_change=self.on_tab,
+                       content=ft.Column(expand=True, controls=[
             ft.TabBar(tabs=[ft.Tab(label=t("tab_controllers"), icon=ft.Icons.SPORTS_ESPORTS),
                             ft.Tab(label=t("tab_settings"), icon=ft.Icons.SETTINGS),
                             ft.Tab(label=t("tab_gamepad"), icon=ft.Icons.VIDEOGAME_ASSET),
@@ -445,12 +467,90 @@ class Controller:
         self.adapters = []
         self.on_mode_change(None)
         return ft.Column(scroll=ft.ScrollMode.AUTO, expand=True, spacing=14, controls=[
+            *self.build_app_settings(), ft.Divider(),
             ft.Text(t("mode"), size=16, weight=ft.FontWeight.BOLD), self.mode_group,
             self.dolphinbar_help, self.bluetooth_box, ft.Divider(),
             ft.Row([self.fields["dsu_host"], self.fields["dsu_port"], self.fields["api_port"]], wrap=True),
             ft.Row([self.switches["ir"], self.switches["motionplus"]]),
             ft.Row([ft.FilledButton(t("save"), icon=ft.Icons.SAVE, on_click=self.on_save)]),
         ])
+
+    def build_app_settings(self):
+        """Windows integration: autostart, tray and service start (saved at once)."""
+        t = self.t
+        self.autostart_switch = ft.Switch(label=t("app_autostart"), value=autostart.enabled(),
+                                          disabled=sys.platform != "win32", on_change=self.on_autostart)
+        prefs = [ft.Switch(label=t(f"app_{key}"), value=self.pref(key), data=key, on_change=self.on_app_pref)
+                 for key in APP_PREFS]
+        return [ft.Text(t("app_title"), size=16, weight=ft.FontWeight.BOLD),
+                ft.Row([self.autostart_switch, *prefs], wrap=True, spacing=24),
+                ft.Text(t("app_hint"), size=12, color=ft.Colors.ON_SURFACE_VARIANT)]
+
+    def pref(self, key):
+        return bool(self.prefs.get(key, APP_PREFS[key]))
+
+    def on_app_pref(self, e):
+        self.prefs[e.control.data] = e.control.value
+        self.save_prefs()
+
+    def on_autostart(self, e):
+        try:
+            if e.control.value:
+                autostart.enable(self.config_path)
+            else:
+                autostart.disable()
+        except OSError as exc:
+            e.control.value = autostart.enabled()
+            self.notify(self.t("failed", error=exc))
+            self.page.update()
+
+    # -- window and tray ---------------------------------------------------
+    def start_tray(self):
+        self.tray = Tray(self.page, self.t, on_open=self.show_window, on_exit=self.quit,
+                         on_mode=self.set_mode_from_tray, current_mode=lambda: self.current_mode)
+        if not self.tray.start():
+            self.tray = None
+
+    @property
+    def current_mode(self):
+        if self.gamepad_status:
+            return self.gamepad_status.get("mode", 1)
+        return self.gamepad_tab.config["mode"] if self.gamepad_tab else self.config.gamepad["mode"]
+
+    async def show_window(self):
+        self.visible = True
+        await self.runtime.set_stream_rate(STREAM_HZ)
+        self.page.window.visible = True
+        self.page.window.skip_task_bar = False
+        self.page.window.minimized = False
+        self.render()                      # catch up on what changed while hidden
+        self.page.update()
+        await self.page.window.to_front()
+
+    def hide_window(self):
+        self.visible = False
+        self.page.run_task(self.runtime.set_stream_rate, 0)  # nothing to draw: pause live data
+        self.page.window.visible = False
+        self.page.window.skip_task_bar = True
+        self.page.update()
+
+    async def set_mode_from_tray(self, mode):
+        if self.gamepad_tab is None:
+            return
+        config = copy.deepcopy(self.gamepad_tab.config)
+        config["mode"] = mode
+        if await self.gamepad_tab.apply(config) and not self.runtime.active and self.tray:
+            self.tray.refresh()            # no service event will arrive
+
+    async def quit(self):
+        if self.closing:
+            return
+        self.closing = True
+        if self.tray:
+            self.tray.stop()
+        await self.runtime.stop()  # release the DolphinBar/adapter before exiting
+        logging.getLogger().removeHandler(self.logs)
+        await self.page.window.destroy()
 
     def refresh_status(self):
         if not self.cards or self.closing:
@@ -474,29 +574,44 @@ class Controller:
         self.page.update()
 
     def render(self):
-        if "gamepad" in self.dirty:
+        """Draw what changed on the visible tab; the rest stays dirty until its tab is
+        shown. Returns True when the page needs an update."""
+        changed = False
+        if "gamepad" in self.dirty:        # mode/status: cheap, and shown in the header
             self.dirty.discard("gamepad")
             if self.gamepad_tab and self.gamepad_status:
                 self.gamepad_tab.on_status(self.gamepad_status)
-        if "xbox" in self.dirty:
+                changed = True
+        if self.tab_index == TAB_GAMEPAD and "xbox" in self.dirty:
             self.dirty.discard("xbox")
             if self.gamepad_tab:
                 self.gamepad_tab.on_xbox(self.xbox_outputs)
-        for slot in sorted(self.dirty):
-            self.cards[slot].render(self.states.get(slot))
-        self.dirty.clear()
-        if self.logs.version != self.log_version:
+                changed = True
+        if self.tab_index == TAB_CONTROLLERS:
+            for slot in [d for d in self.dirty if isinstance(d, int)]:
+                self.cards[slot].render(self.states.get(slot))
+                self.dirty.discard(slot)
+                changed = True
+        if self.tab_index == TAB_LOG and self.logs.version != self.log_version:
             self.log_version = self.logs.version
             self.log_view.controls = [ft.Text(line, size=11, selectable=True, font_family="Consolas")
                                       for line in list(self.logs.lines)[-200:]]
+            changed = True
+        return changed
+
+    def on_tab(self, e):
+        self.tab_index = e.control.selected_index
+        if self.render():
+            self.page.update()
 
     async def refresh_loop(self):
         while not self.closing:
             await asyncio.sleep(1 / REFRESH_HZ)
             if self.closing:
                 return
-            if self.dirty or self.logs.version != self.log_version:
-                self.render()
+            if not self.visible:           # hidden in the tray: no drawing at all
+                continue
+            if self.render():
                 try:
                     self.page.update()
                 except RuntimeError:  # window/session already destroyed
@@ -698,6 +813,8 @@ class Controller:
         self.save_prefs()
         self.t = Translator(e.control.value)
         self.build()
+        if self.tray:
+            self.tray.refresh(self.t)
 
     def on_clear_log(self, e):
         self.logs.lines.clear()
@@ -705,33 +822,63 @@ class Controller:
 
     async def on_window_event(self, e):
         if e.type == ft.WindowEventType.CLOSE:
-            self.closing = True
-            await self.runtime.stop()  # release the DolphinBar/adapter before exiting
-            logging.getLogger().removeHandler(self.logs)
-            await self.page.window.destroy()
+            if self.tray and self.pref("close_to_tray"):
+                self.hide_window()         # keep running; exit from the tray menu
+            else:
+                await self.quit()
 
 
-def run(config_path="config.local.json"):
-    config_path = Path(config_path)
+def default_config_path() -> Path:
+    """The release executable keeps its settings in %APPDATA%/WiiChinaHook (Windows may
+    start it from any folder); a source checkout uses the working directory."""
+    if getattr(sys, "frozen", False):
+        return Path(os.environ.get("APPDATA", Path.home())) / "WiiChinaHook" / "config.local.json"
+    return Path("config.local.json")
+
+
+def run(config_path=None, minimized=False):
+    config_path = Path(config_path or default_config_path()).resolve()
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    prefs_path = config_path.parent / ".wiichinahook" / "gui.json"
+    minimized = minimized or Controller.read_prefs(prefs_path).get("start_minimized", False)
 
     async def main(page: ft.Page):
         page.window.width, page.window.height = 1180, 860
         page.window.min_width, page.window.min_height = 760, 560
+        page.window.icon = str(ASSETS / "icon.ico")
         page.padding = 16
-        controller = Controller(page, config_path, config_path.parent / ".wiichinahook" / "gui.json")
+        controller = Controller(page, config_path, prefs_path)
         page.window.prevent_close = True
         page.window.on_event = controller.on_window_event
         controller.build()
+        controller.start_tray()
+        if minimized and controller.tray:
+            controller.visible = False     # FLET_APP_HIDDEN: stays in the tray until opened
+            controller.runtime.stream_hz = 0
+            page.window.skip_task_bar = True
+            page.update()
+        else:
+            page.window.visible = True
+            page.update()
+        try:
+            autostart.refresh(config_path)  # follow the executable if it was moved
+        except OSError as exc:
+            log.warning("Could not update the autostart entry: %s", exc)
         page.run_task(controller.refresh_loop)
+        if controller.pref("start_service"):
+            await controller.on_toggle(None)
 
-    ft.run(main, assets_dir=str(Path(__file__).parent / "assets"))  # calibration GIFs
+    ft.run(main, assets_dir=str(ASSETS), view=ft.AppView.FLET_APP_HIDDEN)
 
 
 def main():
     import argparse
     parser = argparse.ArgumentParser(prog="wiichinahook-gui")
-    parser.add_argument("--config", default="config.local.json", help="path to JSON config")
-    run(parser.parse_args().config)
+    parser.add_argument("--config", default=None, help="path to JSON config "
+                        "(default: config.local.json here, or %%APPDATA%%/WiiChinaHook for the executable)")
+    parser.add_argument("--minimized", action="store_true", help="start hidden in the notification area")
+    args = parser.parse_args()
+    run(args.config, args.minimized)
 
 
 if __name__ == "__main__":
