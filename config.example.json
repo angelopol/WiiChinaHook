@@ -1,0 +1,9 @@
+{
+  "dongle": {"vid": "0x8087", "pid": "0x0a2a"},
+  "wiimotes": [],
+  "dsu": {"host": "127.0.0.1", "port": 26760},
+  "api": {"host": "127.0.0.1", "port": 26761},
+  "state_dir": ".wiichinahook",
+  "ir": true,
+  "motionplus": true
+}
