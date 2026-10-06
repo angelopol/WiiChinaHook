@@ -55,6 +55,33 @@ class ApiConfig:
 
 MODES = ("dolphinbar", "bluetooth")
 
+# Button combinations for the per-slot quick calibration (WiimoteState.buttons bits).
+COMBOS = {
+    "minus+plus": 0x0010 | 0x1000,
+    "down": 0x0400,          # like the D-pad recenter in Zelda: Skyward Sword
+    "one+two": 0x0002 | 0x0001,
+    "a+b": 0x0008 | 0x0004,
+    "home": 0x0080,
+}
+
+
+@dataclass(frozen=True)
+class SlotOptions:
+    # Hold `combo` ~0.6 s: gyro bias (if still) + recenter. Off by default because
+    # many games recalibrate on their own.
+    quick_calibration: bool = False
+    combo: str = "minus+plus"
+    # Correct the heading drift while the IR camera sees the sensor bar.
+    ir_calibration: bool = False
+
+
+def slot_options_from(data) -> SlotOptions:
+    options = SlotOptions(bool(data.get("quick_calibration", False)), data.get("combo", "minus+plus"),
+                          bool(data.get("ir_calibration", False)))
+    if options.combo not in COMBOS:
+        raise ValueError(f"combo must be one of {', '.join(COMBOS)}")
+    return options
+
 
 @dataclass(frozen=True)
 class AppConfig:
@@ -68,6 +95,7 @@ class AppConfig:
     state_dir: Path = Path(".wiichinahook")
     ir: bool = True
     motionplus: bool = True
+    slots: tuple[SlotOptions, ...] = (SlotOptions(),) * 4
 
 
 def load_config(path: str | Path) -> AppConfig:
@@ -100,6 +128,10 @@ def load_config(path: str | Path) -> AppConfig:
     vid, pid = parse_int(dongle.get("vid", 0x8087)), parse_int(dongle.get("pid", 0x0A2A))
     if vid is None or pid is None or not 0 <= vid <= 65535 or not 0 <= pid <= 65535:
         raise ValueError("USB VID/PID must be 0..65535")
+    slots_data = data.get("slots", [])
+    if not isinstance(slots_data, list) or len(slots_data) > 4:
+        raise ValueError("slots must be a list of at most four objects")
+    slots = tuple(slot_options_from(slots_data[i] if i < len(slots_data) else {}) for i in range(4))
     mode = data.get("mode", "dolphinbar")
     if mode not in MODES:
         raise ValueError(f"mode must be one of {', '.join(MODES)}")
@@ -109,7 +141,7 @@ def load_config(path: str | Path) -> AppConfig:
         remotes, DsuConfig(dsu.get("host", "127.0.0.1"), int(dsu.get("port", 26760))),
         ApiConfig(api.get("host", "127.0.0.1"), int(api.get("port", 26761))),
         path.parent / data.get("state_dir", ".wiichinahook"),
-        bool(data.get("ir", True)), bool(data.get("motionplus", True)),
+        bool(data.get("ir", True)), bool(data.get("motionplus", True)), slots,
     )
 
 
@@ -139,6 +171,8 @@ def config_to_dict(config: AppConfig, base_dir: Path | None = None) -> dict:
         "state_dir": state_dir.as_posix(),
         "ir": config.ir,
         "motionplus": config.motionplus,
+        "slots": [{"quick_calibration": o.quick_calibration, "combo": o.combo, "ir_calibration": o.ir_calibration}
+                  for o in config.slots],
     }
 
 

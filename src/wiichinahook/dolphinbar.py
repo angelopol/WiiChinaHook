@@ -10,13 +10,14 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from dataclasses import replace
+from dataclasses import asdict, replace
 import json
 import logging
 import threading
 import time
 
 from .calibration import GYRO_SCALE_FRAME
+from .config import slot_options_from
 from .session import ReportError, WiimoteSession
 from .wiimote import AccelCalibration, WiimoteState
 
@@ -163,6 +164,7 @@ class DolphinBarManager:
 
     def __init__(self, config, publish, *, devices=bar_devices, opener=None):
         self.config, self.publish = config, publish
+        self.slot_options = list(config.slots)
         self.devices, self.opener = devices, opener
         self.sessions = {}
         self.states = {}
@@ -259,6 +261,8 @@ class DolphinBarManager:
             session.parser.gyro_scale = tuple(settings["gyro_scale"])
             state.calibration["gyro_scale"] = list(session.parser.gyro_scale)
         self.sessions[slot] = session
+        session.apply_options(self.slot_options[slot])
+        session.on_bias_changed = lambda bias: self.store.update(slot, gyro_bias=list(bias))
         link.on("close", lambda: self.spawn(self.drop(slot, "Remote disconnected from the DolphinBar"))
                 if self.sessions.get(slot) is session else None)
         session.attach(link)
@@ -302,6 +306,22 @@ class DolphinBarManager:
         result = await session.calibrate()
         self.store.update(slot, gyro_bias=list(session.parser.gyro_bias))
         return result
+
+    def set_slot_options(self, slot, **changes):
+        """Change a slot's quick/IR calibration options live (the GUI also saves them)."""
+        if not isinstance(slot, int) or slot not in range(4):
+            raise ValueError("slot must be 0..3")
+        unknown = set(changes) - {"quick_calibration", "combo", "ir_calibration"}
+        if unknown:
+            raise ValueError(f"Unknown option: {', '.join(sorted(unknown))}")
+        current = asdict(self.slot_options[slot])
+        current.update({k: v for k, v in changes.items() if v is not None})
+        options = slot_options_from(current)
+        self.slot_options[slot] = options
+        for session in self.sessions.values():
+            if session.state.slot == slot:
+                session.apply_options(options)
+        return dict(asdict(options), slot=slot)
 
     async def calibrate_axis(self, slot, axis):
         session = self.session_for(slot)

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field, asdict
 import struct
 import time
 
-from .orientation import OrientationFilter, tilt_from_accel
+from .orientation import OrientationFilter, ir_heading, tilt_from_accel
 
 PSM_HID_CONTROL = 0x11
 PSM_HID_INTERRUPT = 0x13
@@ -106,6 +106,7 @@ class ReportParser:
         self.extension_connected = False
         self.gyro_slow = (True,) * 3
         self.orientation = OrientationFilter()
+        self.ir_heading = False  # SlotOptions.ir_calibration
 
     def feed(self, data: bytes) -> bool:
         if data[:1] == b"\xa1":
@@ -140,6 +141,10 @@ class ReportParser:
             offset = 2 if report == 0x36 else 5
             s.ir = parse_ir(p[offset:offset + (12 if report == 0x33 else 10)], report == 0x33)
             s.ir_timestamp_us = now
+            if self.ir_heading:
+                target = ir_heading(s.ir)
+                if target is not None and self.orientation.correct_heading(target):
+                    s.calibration["heading"] = "ir"  # heading now absolute: 0 = sensor bar
         ext_offset = {0x32: 2, 0x34: 2, 0x35: 5, 0x36: 12, 0x37: 15, 0x3D: 0}.get(report)
         if ext_offset is not None and self.extension:
             self.parse_extension(p[ext_offset:ext_offset + 6], now)

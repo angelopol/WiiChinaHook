@@ -112,6 +112,19 @@ TEXT = {
         "driver_working": "Installing the driver… accept the Windows permission prompt.",
         "driver_done": "Driver changed.",
         "driver_done_reboot": "Driver changed; Windows asks for a restart to finish.",
+        "quick_calibration": "Quick calibration",
+        "quick_calibration_hint": "Hold the button combination ~0.6 s: short vibration, keep the remote still "
+                                  "~1 s; double vibration = gyro recalibrated and recentered, long = only "
+                                  "recentered (it moved). Turn it off if the game calibrates by itself.",
+        "combo": "Buttons",
+        "combo_minus_plus": "− and +",
+        "combo_down": "↓ (Zelda)",
+        "combo_one_two": "1 and 2",
+        "combo_a_b": "A and B",
+        "combo_home": "Home",
+        "ir_calibration": "Calibrate with the sensor bar",
+        "ir_calibration_hint": "While the IR camera sees both sensor bar dots and the remote is roughly "
+                               "level, correct the heading drift: pointing at the bar = straight ahead.",
     },
     "es": {
         "title": "WiiChinaHook",
@@ -220,6 +233,19 @@ TEXT = {
         "driver_working": "Instalando el controlador… acepta el aviso de permisos de Windows.",
         "driver_done": "Controlador cambiado.",
         "driver_done_reboot": "Controlador cambiado; Windows pide reiniciar para terminar.",
+        "quick_calibration": "Calibración rápida",
+        "quick_calibration_hint": "Mantén la combinación ~0,6 s: vibración corta, deja el mando quieto ~1 s; "
+                                  "doble vibración = giroscopio recalibrado y recentrado, larga = solo "
+                                  "recentrado (se movió). Desactívala si el juego calibra por sí mismo.",
+        "combo": "Botones",
+        "combo_minus_plus": "− y +",
+        "combo_down": "↓ (Zelda)",
+        "combo_one_two": "1 y 2",
+        "combo_a_b": "A y B",
+        "combo_home": "Home",
+        "ir_calibration": "Calibrar con la barra sensora",
+        "ir_calibration_hint": "Mientras la cámara IR ve los dos puntos de la barra y el mando está más o "
+                               "menos nivelado, corrige la deriva del giro: apuntar a la barra = de frente.",
     },
 }
 

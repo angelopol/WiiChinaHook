@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 import collections
 import json
 import logging
@@ -12,7 +13,7 @@ import webbrowser
 import flet as ft
 import flet.canvas as cv
 
-from ..config import AppConfig, load_config, parse_int, save_config
+from ..config import COMBOS, AppConfig, SlotOptions, load_config, parse_int, save_config
 from ..orientation import from_axis_angle, multiply, reference_yaw
 from .i18n import LANGUAGES, Translator
 from .model import (BUTTONS, BUTTON_LABELS, bar_value, config_from_form, fmt, form_from_config,
@@ -79,6 +80,19 @@ class SlotCard:
         self.referenced = False
         self.orientation = None
         self.recenter = ft.IconButton(ft.Icons.CENTER_FOCUS_STRONG, tooltip=t("recenter"), on_click=self.on_recenter)
+        self.recenter_seq = None
+        config = getattr(controller, "config", None)
+        options = config.slots[slot] if config else SlotOptions()
+        self.quick_switch = ft.Switch(label=t("quick_calibration"), value=options.quick_calibration,
+                                      tooltip=t("quick_calibration_hint"),
+                                      on_change=lambda e: self.option_changed(quick_calibration=e.control.value))
+        self.combo_select = ft.Dropdown(value=options.combo, width=150, dense=True, label=t("combo"),
+                                        options=[ft.DropdownOption(k, t(f"combo_{k.replace('+', '_')}"))
+                                                 for k in COMBOS],
+                                        on_select=lambda e: self.option_changed(combo=e.control.value))
+        self.ir_switch = ft.Switch(label=t("ir_calibration"), value=options.ir_calibration,
+                                   tooltip=t("ir_calibration_hint"),
+                                   on_change=lambda e: self.option_changed(ir_calibration=e.control.value))
         self.leds = [ft.Checkbox(value=i == slot % 4, on_change=self.on_led) for i in range(4)]
         self.action_controls = [
             ft.Button(t("rumble"), icon=ft.Icons.VIBRATION, on_click=self.on_rumble),
@@ -113,6 +127,8 @@ class SlotCard:
             ]),
             ft.Row(self.action_controls, wrap=True, spacing=6),
             ft.Row([ft.Text(t("leds"), size=12), *self.leds], spacing=2),
+            ft.Row([self.quick_switch, self.combo_select, self.ir_switch], wrap=True, spacing=12,
+                   vertical_alignment=ft.CrossAxisAlignment.CENTER),
         ])))
         self.render(None)
 
@@ -156,10 +172,15 @@ class SlotCard:
             shapes.append(cv.Circle(x + 6, y + 6, 6, ft.Paint(color=ft.Colors.PRIMARY)))
         self.stick_canvas.shapes = shapes
         self.orientation = state.get("orientation") if connected else None
+        calibration = state.get("calibration", {}) if connected else {}
         if self.orientation is None:
-            self.referenced = False
-        elif not self.referenced:  # first pose after connecting: take it as reference
+            self.referenced, self.recenter_seq = False, None
+        elif calibration.get("heading") == "ir":
+            self.yaw_offset, self.referenced = 0.0, True  # absolute: 0 = sensor bar / screen
+        elif not self.referenced or calibration.get("recenter_seq") != self.recenter_seq:
+            # First pose after connecting, or the remote ran its quick calibration.
             self.yaw_offset, self.referenced = reference_yaw(tuple(self.orientation)), True
+        self.recenter_seq = calibration.get("recenter_seq") if self.orientation is not None else None
         self.render_pose(state if connected else None)
 
     def render_pose(self, state):
@@ -186,6 +207,9 @@ class SlotCard:
             self.yaw_offset = reference_yaw(tuple(self.orientation))
             self.render_pose({"capabilities": {"motionplus": True}})
             self.pose_canvas.update()
+
+    def option_changed(self, **change):
+        self.controller.page.run_task(self.controller.update_slot_options, self.slot, change)
 
     async def on_led(self, e):
         await self.controller.command("led", slot=self.slot, mask=led_mask([c.value for c in self.leds]))
@@ -581,6 +605,20 @@ class Controller:
             os.startfile(zadig)  # Windows asks for administrator rights
         except OSError as exc:
             self.notify(self.t("failed", error=exc))
+
+    async def update_slot_options(self, slot, change):
+        """Save one slot's options and apply them to the running service at once."""
+        slots = list(self.config.slots)
+        slots[slot] = replace(slots[slot], **change)
+        try:
+            config = replace(self.load_config(), slots=tuple(slots))
+            save_config(config, self.config_path)
+        except (OSError, ValueError) as exc:
+            self.notify(self.t("failed", error=exc))
+            return
+        self.config = config
+        if self.runtime.active:
+            await self.command("slot_options", slot=slot, **change)
 
     async def on_save(self, e):
         form = {key: field.value for key, field in self.fields.items()}

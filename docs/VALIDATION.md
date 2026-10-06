@@ -146,5 +146,8 @@ signs, bias) and with the real clone pitch capture (factor ≈ 1/1.85).
 | Several remotes | Persistent slots, no crossed data/LEDs/rumble (both modes) |
 | USB unplugged | Disconnected states and recovery when plugged back |
 | Back to Dolphin | Close the service and use the adapter from Dolphin again |
+| Driver switch | Settings → Adapter driver: Intel to libusbK and back to Windows Bluetooth, with UAC, no Zadig |
+| Quick calibration | Holding the combo ~0.6 s: double rumble when still (bias refreshed, recentered), long rumble when moving |
+| Sensor bar calibration | Pointing at the bar removes heading drift; **check the IR image sign** (turning left must keep the bar straight ahead) |
 
 For each test record the remote/accessory model, configuration, result and trace path.

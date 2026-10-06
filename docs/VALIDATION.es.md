@@ -148,6 +148,9 @@ signos invertidos, sesgo) y con la captura real de cabeceo del clon (factor ≈ 
 | Varios mandos | Slots persistentes, sin cruces de datos/LED/vibración (en ambos modos) |
 | USB retirado | Estados desconectados y recuperación al insertar |
 | Regreso a Dolphin | Cerrar hook y recuperar el adaptador desde Dolphin |
+| Cambio de controlador | Ajustes → Controlador del adaptador: Intel a libusbK y de vuelta al Bluetooth de Windows, con UAC y sin Zadig |
+| Calibración rápida | Mantener la combinación ~0,6 s: doble vibración si está quieto (sesgo renovado y recentrado), larga si se mueve |
+| Calibración con la barra | Apuntar a la barra elimina la deriva del giro; **verificar el signo de la imagen IR** (al girar a la izquierda la barra debe seguir "de frente") |
 
 Para cada prueba registrar modelo del mando/accesorios, configuración, resultado
 y ruta de la traza.

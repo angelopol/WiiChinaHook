@@ -14,7 +14,13 @@ JSON over WebSocket at `ws://127.0.0.1:26761`. Each request carries `v`, `id`,
 {"v":1,"id":6,"command":"calibrate","args":{"slot":0}}
 {"v":1,"id":7,"command":"forget","args":{"slot":0}}
 {"v":1,"id":8,"command":"calibrate_axis","args":{"slot":0,"axis":"pitch"}}
+{"v":1,"id":9,"command":"slot_options","args":{"slot":0,"quick_calibration":true,"combo":"down","ir_calibration":true}}
+{"v":1,"id":10,"command":"quick_calibrate","args":{"slot":0}}
 ```
+
+`slot_options` changes a slot's quick/sensor-bar calibration options live (only the
+given fields; the reply has all of them) and `quick_calibrate` runs the same quick
+calibration as the button combination (reply `{"bias_updated": true|false}`).
 
 `calibrate_axis` (axis `pitch`, `roll` or `yaw`) runs the guided MotionPlus scale
 calibration described in the README and replies after about 7 s with `factor`,
@@ -61,7 +67,7 @@ The example is abbreviated. The full state contains:
 | `extension` | null, nunchuk, motionplus or motionplus+nunchuk |
 | `timestamp_us` | Monotonic time of the last report/state in microseconds |
 | `accel_timestamp_us`, `gyro_timestamp_us`, `ir_timestamp_us`, `nunchuk_timestamp_us` | Time of each sample; 0 before the first one |
-| `calibration` | Calibration sources, manual gyro bias and `gyro_scale` (yaw, roll, pitch factors), if any |
+| `calibration` | Calibration sources, manual gyro bias and `gyro_scale` (yaw, roll, pitch factors), if any; `recenter_seq` increases on every quick calibration; `heading: "ir"` once the sensor bar corrects the heading |
 
 **Axes.** `accel_g` uses the raw Wii frame, which is right-handed: +X to the remote's
 **left**, +Y towards the **back** (the 1/2 buttons end), +Z out of the buttons face.

@@ -99,6 +99,11 @@ class ApiServer:
             raise ValueError("slot must be 0..3")
         if command == "forget":
             return await self.manager.forget(slot)
+        if command == "slot_options":
+            options = {k: args.get(k) for k in ("quick_calibration", "combo", "ir_calibration")}
+            return self.manager.set_slot_options(slot, **options)
+        if command == "quick_calibrate":
+            return await self.manager.session_for(slot).quick_calibrate()
         if command == "calibrate_axis":
             if args.get("axis") not in ("pitch", "roll", "yaw"):
                 raise ValueError("axis must be pitch, roll or yaw")

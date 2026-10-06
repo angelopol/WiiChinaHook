@@ -43,11 +43,13 @@ or the adapter at a time. To go back to Dolphin, stop the service.
   the screen" (lying flat) or "buttons facing you" (sideways grip). Without
   MotionPlus the view shows tilt only. Rumble, LEDs, gyro bias calibration, MotionPlus
   scale calibration and forget are one click away; in Bluetooth mode a pairing panel
-  appears.
+  appears. Each card also has the per-remote **quick calibration** and **sensor bar
+  calibration** switches (see below).
 - **Settings:** connection mode, DSU/API ports, IR and MotionPlus switches, saved to
   `config.local.json`. In Bluetooth mode the app lists the adapters that use the
   libusbK/WinUSB driver; if there is none it explains how to install one with Zadig
-  and offers to open or download it.
+  and offers to open or download it. **Adapter driver** switches an adapter between
+  libusbK and its Windows Bluetooth driver without Zadig (see below).
 - **Log:** live service log.
 - English and Spanish UI (language selector in the header).
 
@@ -146,9 +148,39 @@ The yellow line is the axis being calibrated; the bar shows the phases (grey: st
 blue: turn, green: hold) and the zigzags mark the vibrations. The GIFs are rendered
 from the app's own 3D model by `tools/make_calibration_gifs.py` (needs the `[dev]` extra).
 
+### Quick calibration and sensor bar calibration
+
+Both are per remote (slot), off by default, and can be changed live from each card in
+the GUI:
+
+- **Quick calibration** — like the recenter button in games such as *Zelda: Skyward
+  Sword*. Hold the chosen combination (− and +, ↓, 1 and 2, A and B, or Home) for
+  ~0.6 s: short vibration, keep the remote still ~1 s. A double vibration means the gyro
+  bias was refreshed and the orientation recentered; a long one means it moved, so it
+  was only recentered. Leave it off for games that calibrate by themselves.
+- **Sensor bar calibration** — while the IR camera sees both dots of the sensor bar and
+  the remote is roughly level, their horizontal position gives the real direction to
+  the screen and slowly removes the heading drift (as the Wii does). The heading then
+  becomes absolute: 0 = pointing at the bar.
+
+In `config.local.json` they are stored as
+`"slots": [{"quick_calibration": false, "combo": "minus+plus", "ir_calibration": false}, …]`
+(combos: `minus+plus`, `down`, `one+two`, `a+b`, `home`).
+
 Rumble lasts at most five seconds and stops when the session closes. `forget`
 removes the registry entry and the local link key; it does not change bonds stored
 inside the Wiimote. Wait for connection/pairing attempts to finish before using it.
+
+### Switching the adapter driver without Zadig
+
+Windows keeps every installed driver package. Once an adapter has had libusbK (Zadig
+the first time), **Settings → Adapter driver** switches it both ways: **Use with
+WiiChinaHook (libusbK)** and **Restore Windows Bluetooth**. The app forces the newest
+matching package from the driver store (`C:\Windows\INF\oem*.inf`) with
+`UpdateDriverForPlugAndPlayDevices`; without a vendor Bluetooth package it falls back to
+Microsoft's generic `bth.inf`. Windows asks for administrator permission; stop the
+service first if it is using the adapter. The same is available as
+`python -m wiichinahook.drivers list --vid 8087 --pid 0a2a`.
 
 Clone "CSR 4.0" dongles (`0A12:0001`, `bcdDevice 0x8891`) declare a duplicated USB
 alternate setting; Windows refuses to start them with libusbK, WinUSB or UsbDk (Code

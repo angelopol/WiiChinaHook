@@ -7,6 +7,7 @@ import logging
 import statistics
 import time
 
+from .config import COMBOS, SlotOptions
 from .wiimote import AccelCalibration, ReportParser, output_report
 
 log = logging.getLogger(__name__)
@@ -47,6 +48,11 @@ class WiimoteSession:
         self.last_extension_probe = 0.0
         self.gyro_samples = None
         self.axis_samples = None
+        self.options = SlotOptions()
+        self.combo_since = None
+        self.combo_fired = False
+        self.quick_task = None
+        self.on_bias_changed = None  # manager hook to persist a new gyro bias
         self.motionplus_port_connected = None
         self.last_status = time.monotonic()
 
@@ -179,7 +185,65 @@ class WiimoteSession:
                 self.motionplus_port_connected = attached
                 if (previous is not None and attached != previous) or (previous is None and attached != (self.parser.extension == "motionplus+nunchuk")):
                     self.schedule_reconfigure()
+        if self.initialized:
+            self.check_combo()
         self.publish(self.state)
+
+    # -- per-slot options ------------------------------------------------------
+    def apply_options(self, options: SlotOptions):
+        self.options = options
+        self.parser.ir_heading = options.ir_calibration
+        if not options.ir_calibration:
+            self.state.calibration.pop("heading", None)
+        self.combo_since, self.combo_fired = None, False
+
+    COMBO_HOLD = 0.6  # seconds the combination must be held
+
+    def check_combo(self):
+        mask = COMBOS.get(self.options.combo, 0)
+        if not self.options.quick_calibration or not mask or self.state.buttons & mask != mask:
+            self.combo_since, self.combo_fired = None, False
+            return
+        now = time.monotonic()
+        if self.combo_since is None:
+            self.combo_since = now
+        elif not self.combo_fired and now - self.combo_since >= self.COMBO_HOLD:
+            self.combo_fired = True  # once per press
+            if not self.quick_task or self.quick_task.done():
+                self.quick_task = self.spawn(self.quick_calibrate())
+
+    async def quick_calibrate(self, still=1.0):
+        """Games-style quick calibration: short rumble, ~1 s of samples; if the remote
+        was still, refresh the gyro bias; always recenter the orientation. Double rumble
+        = bias and recenter, long rumble = recentered only (it moved)."""
+        await self.rumble(150)
+        await asyncio.sleep(0.3)
+        bias_updated = False
+        if self.state.capabilities["motionplus"] and self.gyro_samples is None and self.axis_samples is None:
+            self.gyro_samples = []
+            try:
+                await asyncio.sleep(still)
+                samples = self.gyro_samples
+            finally:
+                self.gyro_samples = None
+            axes = list(zip(*samples)) if len(samples) >= 15 else []
+            if axes and all(statistics.pstdev(axis) <= 2.5 for axis in axes):
+                self.parser.gyro_bias = tuple(old + statistics.mean(axis) / scale for old, axis, scale
+                                              in zip(self.parser.gyro_bias, axes, self.parser.gyro_scale))
+                self.state.calibration["gyro_bias"] = list(self.parser.gyro_bias)
+                bias_updated = True
+                if self.on_bias_changed:
+                    self.on_bias_changed(self.parser.gyro_bias)
+        self.parser.orientation.recenter()
+        self.state.calibration["recenter_seq"] = self.state.calibration.get("recenter_seq", 0) + 1
+        self.publish(self.state)
+        if bias_updated:
+            await self.rumble(120)
+            await asyncio.sleep(0.25)
+            await self.rumble(120)
+        else:
+            await self.rumble(500)
+        return {"bias_updated": bias_updated}
 
     def status_received(self):
         if not self.status_task or self.status_task.done():

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from dataclasses import asdict
 import logging
 import time
 
@@ -14,7 +15,7 @@ from bumble.keys import JsonKeyStore
 from bumble.snoop import BtSnooper
 from bumble.transport import open_transport_or_link
 
-from .config import normalize_address
+from .config import normalize_address, slot_options_from
 from .scanner import extract_name, is_probable_wiimote
 from .session import WiimoteSession
 from .storage import Registry
@@ -73,6 +74,7 @@ class WiiDevice(Device):
 class WiimoteManager:
     def __init__(self, config, publish):
         self.config, self.publish = config, publish
+        self.slot_options = list(config.slots)
         self.device = None
         self.registry = None
         self.sessions = {}
@@ -258,6 +260,8 @@ class WiimoteManager:
             session.parser.gyro_scale = tuple(entry["gyro_scale"])
             state.calibration["gyro_scale"] = list(session.parser.gyro_scale)
         self.sessions[address] = session
+        session.apply_options(self.slot_options[entry["slot"]])
+        session.on_bias_changed = lambda bias, a=address: self.save_entry(a, gyro_bias=list(bias))
         connection.on("disconnection", lambda reason: self.spawn(self.disconnected(address, session, reason)) if self.adapter_active else None)
         self.spawn(self.start_session(address, session, entry))
 
@@ -410,6 +414,27 @@ class WiimoteManager:
         self.registry.devices[session.state.address]["gyro_bias"] = list(session.parser.gyro_bias)
         self.registry.save()
         return result
+
+    def set_slot_options(self, slot, **changes):
+        """Change a slot's quick/IR calibration options live (the GUI also saves them)."""
+        if not isinstance(slot, int) or slot not in range(4):
+            raise ValueError("slot must be 0..3")
+        unknown = set(changes) - {"quick_calibration", "combo", "ir_calibration"}
+        if unknown:
+            raise ValueError(f"Unknown option: {', '.join(sorted(unknown))}")
+        current = asdict(self.slot_options[slot])
+        current.update({k: v for k, v in changes.items() if v is not None})
+        options = slot_options_from(current)
+        self.slot_options[slot] = options
+        for session in self.sessions.values():
+            if session.state.slot == slot:
+                session.apply_options(options)
+        return dict(asdict(options), slot=slot)
+
+    def save_entry(self, address, **values):
+        if address in self.registry.devices:
+            self.registry.devices[address].update(values)
+            self.registry.save()
 
     async def calibrate_axis(self, slot, axis):
         session = self.session_for(slot)

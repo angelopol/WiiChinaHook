@@ -103,6 +103,17 @@ class OrientationFilter:
     def reset(self):
         self.q, self.last_us = None, None
 
+    def recenter(self):
+        if self.q is not None:
+            self.q = recentered(self.q)
+
+    def correct_heading(self, target: float, gain: float = 0.04) -> bool:
+        """Pull the tip heading towards `target` (e.g. from the sensor bar)."""
+        if self.q is None or not level_enough(self.q):
+            return False
+        self.q = _rotate_heading(self.q, gain * _wrap(target - yaw_of(self.q)))
+        return True
+
     def update(self, accel_g, gyro_dps, t_us: int) -> Quaternion:
         """gyro_dps is MotionPlus order (yaw, roll, pitch); accel_g Wii (X, Y, Z)."""
         if self.q is None:
@@ -127,3 +138,44 @@ class OrientationFilter:
         dq = multiply(self.q, (0.0, wx, wy, wz))
         self.q = normalize(tuple(c + 0.5 * d * dt for c, d in zip(self.q, dq)))
         return self.q
+
+
+# Wii IR camera: 1024 px across ~41 degrees. Its image is mirrored as seen from the
+# player (pointing right moves the dots left), so a bar left of the image centre
+# means the remote is turned left. Sign taken from the usual Wii references; not
+# yet verified against a capture of this clone.
+IR_WIDTH = 1024
+IR_FOV_X = math.radians(41.0)
+
+
+def ir_heading(points):
+    """Heading of the tip relative to the sensor bar (counter-clockwise = +, radians)
+    from basic IR points, or None unless two well separated dots are visible."""
+    visible = [p for p in points or () if p]
+    if len(visible) < 2:
+        return None
+    a, b = max(((p, q) for i, p in enumerate(visible) for q in visible[i + 1:]),
+               key=lambda pq: math.hypot(pq[0]["x"] - pq[1]["x"], pq[0]["y"] - pq[1]["y"]))
+    separation = math.hypot(a["x"] - b["x"], a["y"] - b["y"])
+    if not 40 <= separation <= 900:  # one source / reflections, or nonsense
+        return None
+    middle = (a["x"] + b["x"]) / 2
+    return (middle - (IR_WIDTH - 1) / 2) / IR_WIDTH * IR_FOV_X
+
+
+def _wrap(angle):
+    return (angle + math.pi) % (2 * math.pi) - math.pi
+
+
+def _rotate_heading(q: Quaternion, angle: float) -> Quaternion:
+    return normalize(multiply(from_axis_angle((0.0, 0.0, 1.0), angle), q))
+
+
+def recentered(q: Quaternion) -> Quaternion:
+    """Same tilt with the heading reset so the pose reads 'straight ahead'."""
+    return _rotate_heading(q, -reference_yaw(q))
+
+
+def level_enough(q: Quaternion) -> bool:
+    """Tip and right side close to horizontal: IR x maps to heading."""
+    return abs(rotate(q, (0.0, 1.0, 0.0))[2]) < 0.6 and abs(rotate(q, (1.0, 0.0, 0.0))[2]) < 0.4

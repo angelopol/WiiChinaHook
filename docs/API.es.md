@@ -14,7 +14,14 @@ y opcionalmente `args`. El servidor responde con el mismo `id` y `ok`.
 {"v":1,"id":6,"command":"calibrate","args":{"slot":0}}
 {"v":1,"id":7,"command":"forget","args":{"slot":0}}
 {"v":1,"id":8,"command":"calibrate_axis","args":{"slot":0,"axis":"pitch"}}
+{"v":1,"id":9,"command":"slot_options","args":{"slot":0,"quick_calibration":true,"combo":"down","ir_calibration":true}}
+{"v":1,"id":10,"command":"quick_calibrate","args":{"slot":0}}
 ```
+
+`slot_options` cambia en vivo las opciones de calibración rápida y por barra sensora de un
+slot (solo los campos indicados; la respuesta los incluye todos) y `quick_calibrate`
+ejecuta la misma calibración rápida que la combinación de botones (respuesta
+`{"bias_updated": true|false}`).
 
 `calibrate_axis` (eje `pitch`, `roll` o `yaw`) ejecuta la calibración guiada de escala
 del MotionPlus descrita en el README y responde tras unos 7 s con `factor`,
@@ -60,7 +67,7 @@ El ejemplo está abreviado. El estado completo contiene:
 | `extension` | null, nunchuk, motionplus o motionplus+nunchuk |
 | `timestamp_us` | Tiempo monotónico del último reporte/estado en microsegundos |
 | `accel_timestamp_us`, `gyro_timestamp_us`, `ir_timestamp_us`, `nunchuk_timestamp_us` | Tiempo de cada muestra; 0 antes de recibirla |
-| `calibration` | Fuentes de calibración, sesgo manual de gyro y `gyro_scale` (factores yaw, roll, pitch), si existen |
+| `calibration` | Fuentes de calibración, sesgo manual de gyro y `gyro_scale` (factores yaw, roll, pitch), si existen; `recenter_seq` aumenta en cada calibración rápida; `heading: "ir"` cuando la barra sensora ya corrige la dirección |
 
 **Ejes.** `accel_g` usa el sistema crudo del Wii, que es dextrógiro: +X hacia la
 **izquierda** del mando, +Y hacia **atrás** (el extremo de los botones 1/2), +Z saliendo

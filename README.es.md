@@ -43,11 +43,14 @@ DolphinBar o el adaptador. Para volver a Dolphin, detén el servicio.
   actual en "apuntando a la pantalla" (plano) o "botones hacia ti" (agarre de lado).
   Sin MotionPlus solo se muestra la inclinación. Vibración, LEDs, calibración del
   sesgo del giroscopio, calibración de escala del MotionPlus y olvidar están a un clic;
-  en modo Bluetooth aparece un panel de emparejamiento.
+  en modo Bluetooth aparece un panel de emparejamiento. Cada tarjeta incluye además los
+  interruptores por mando de **calibración rápida** y **calibración con la barra
+  sensora** (ver más abajo).
 - **Ajustes:** modo de conexión, puertos DSU/API, IR y MotionPlus, guardados en
   `config.local.json`. En modo Bluetooth la app lista los adaptadores con controlador
   libusbK/WinUSB; si no hay ninguno, explica cómo instalarlo con Zadig y ofrece
-  abrirlo o descargarlo.
+  abrirlo o descargarlo. **Controlador del adaptador** cambia un adaptador entre libusbK
+  y su controlador Bluetooth de Windows sin Zadig (ver más abajo).
 - **Registro:** registro del servicio en vivo.
 - Interfaz en inglés y español (selector de idioma en la cabecera).
 
@@ -147,9 +150,39 @@ azul: girar, verde: mantener) y los zigzags marcan las vibraciones. Los GIF se g
 con el propio modelo 3D de la app mediante `tools/make_calibration_gifs.py` (requiere el
 extra `[dev]`).
 
+### Calibración rápida y calibración con la barra sensora
+
+Las dos son por mando (slot), vienen desactivadas y se cambian en vivo desde cada
+tarjeta de la GUI:
+
+- **Calibración rápida**: como el botón de recentrar de juegos como *Zelda: Skyward
+  Sword*. Mantén la combinación elegida (− y +, ↓, 1 y 2, A y B, o Home) ~0,6 s:
+  vibración corta, deja el mando quieto ~1 s. Una doble vibración indica que se renovó el
+  sesgo del giroscopio y se recentró la orientación; una larga, que se movió y solo se
+  recentró. Déjala desactivada en juegos que calibran por sí mismos.
+- **Calibración con la barra sensora**: mientras la cámara IR ve los dos puntos de la
+  barra y el mando está más o menos nivelado, su posición horizontal da la dirección real
+  hacia la pantalla y elimina poco a poco la deriva del giro (como hace la Wii). La
+  dirección pasa a ser absoluta: 0 = apuntando a la barra.
+
+En `config.local.json` se guardan como
+`"slots": [{"quick_calibration": false, "combo": "minus+plus", "ir_calibration": false}, …]`
+(combinaciones: `minus+plus`, `down`, `one+two`, `a+b`, `home`).
+
 La vibración dura como máximo cinco segundos y se apaga al cerrar la sesión.
 `forget` borra el registro y la clave local; no modifica vínculos guardados dentro
 del Wiimote. Espera a que finalicen intentos de conexión/sincronización para usarlo.
+
+### Cambiar el controlador del adaptador sin Zadig
+
+Windows guarda todos los paquetes de controladores instalados. Cuando un adaptador ya
+tuvo libusbK (con Zadig la primera vez), **Ajustes → Controlador del adaptador** lo cambia
+en ambos sentidos: **Usar con WiiChinaHook (libusbK)** y **Restaurar Bluetooth de
+Windows**. La app fuerza el paquete más reciente que coincide, tomado del almacén de
+controladores (`C:\Windows\INF\oem*.inf`), con `UpdateDriverForPlugAndPlayDevices`; si no
+hay paquete Bluetooth del fabricante, usa el genérico de Microsoft (`bth.inf`). Windows
+pide permiso de administrador; detén antes el servicio si está usando el adaptador.
+También está disponible como `python -m wiichinahook.drivers list --vid 8087 --pid 0a2a`.
 
 Los adaptadores clon "CSR 4.0" (`0A12:0001`, `bcdDevice 0x8891`) declaran una
 configuración USB alternativa duplicada; Windows se niega a iniciarlos con libusbK,
