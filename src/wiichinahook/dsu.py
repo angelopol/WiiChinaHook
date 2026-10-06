@@ -150,9 +150,15 @@ class DsuServer:
         payload[16:19] = bytes([dpad, face, home])
         payload[24:36] = analogs
         struct.pack_into("<Q", payload, 48, state.accel_timestamp_us)
-        # Wii X points left, Y forward, Z up; DSU X left, Y up, Z forward.
+        # Axes as Dolphin's DSU client reads them (DualShockUDPClient.cpp: "Accel Up"
+        # = -y, "Accel Left" = +x, "Accel Forward" = +z; "Gyro Pitch Up" = +pitch,
+        # "Roll Right" = +roll, "Yaw Right" = +yaw), i.e. DSU x left, y down, z forward.
+        # Dolphin's IMU frame equals the Wii's (X left, Y back, Z up; IMUAccelerometer:
+        # x = Left - Right, y = Backward - Forward, z = Up - Down; IMUGyroscope:
+        # x = PitchDown - PitchUp, y = RollLeft - RollRight, z = YawLeft - YawRight),
+        # and MotionPlus pitch/roll/yaw are right-handed about those axes.
         x, y, z = state.accel_g or (0., 0., 0.)
-        struct.pack_into("<fff", payload, 56, x, z, y)
+        struct.pack_into("<fff", payload, 56, x, -z, -y)
         yaw, roll, pitch = state.gyro_dps or (0., 0., 0.)
-        struct.pack_into("<fff", payload, 68, pitch, yaw, roll)
+        struct.pack_into("<fff", payload, 68, -pitch, -yaw, -roll)
         return bytes(payload)

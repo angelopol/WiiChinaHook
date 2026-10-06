@@ -5,6 +5,8 @@ from dataclasses import dataclass, field, asdict
 import struct
 import time
 
+from .orientation import OrientationFilter, tilt_from_accel
+
 PSM_HID_CONTROL = 0x11
 PSM_HID_INTERRUPT = 0x13
 HID_INPUT_REPORT = 0xA1
@@ -44,6 +46,8 @@ class WiimoteState:
     gyro_dps: tuple[float, float, float] | None = None
     ir: list[dict | None] | None = None
     nunchuk: dict | None = None
+    # Body->world quaternion (w, x, y, z); see orientation.py. Tilt only without MotionPlus.
+    orientation: list[float] | None = None
     extension: str | None = None
     capabilities: dict = field(default_factory=lambda: {"buttons": True, "accelerometer": True,
                                                         "ir": False, "motionplus": False, "nunchuk": False})
@@ -58,7 +62,7 @@ class WiimoteState:
         self.error = error
         self.buttons = 0
         self.accel_raw = self.accel_g = self.gyro_raw = self.gyro_dps = None
-        self.ir = self.nunchuk = None
+        self.ir = self.nunchuk = self.orientation = None
         self.battery = None
         self.accel_timestamp_us = self.gyro_timestamp_us = self.ir_timestamp_us = self.nunchuk_timestamp_us = 0
         self.timestamp_us = time.monotonic_ns() // 1000
@@ -93,11 +97,15 @@ class ReportParser:
         self.accel = AccelCalibration()
         self.gyro_zero = (8063.0,) * 3
         self.gyro_bias = (0.0,) * 3
+        # Per-channel (yaw, roll, pitch) correction from calibrate_axis; may be
+        # negative when a remote reports a channel with the opposite sign.
+        self.gyro_scale = (1.0,) * 3
         self.gyro_blocks = None
         self.nunchuk_calibration = None
         self.extension = None
         self.extension_connected = False
         self.gyro_slow = (True,) * 3
+        self.orientation = OrientationFilter()
 
     def feed(self, data: bytes) -> bool:
         if data[:1] == b"\xa1":
@@ -125,6 +133,9 @@ class ReportParser:
                            (p[4] << 2) | ((p[1] >> 5) & 2))
             s.accel_g = self.accel.convert(s.accel_raw)
             s.accel_timestamp_us = now
+            if not (self.extension or "").startswith("motionplus"):
+                self.orientation.reset()
+                s.orientation = list(tilt_from_accel(s.accel_g))
         if report in (0x33, 0x36, 0x37):
             offset = 2 if report == 0x36 else 5
             s.ir = parse_ir(p[offset:offset + (12 if report == 0x33 else 10)], report == 0x33)
@@ -150,8 +161,9 @@ class ReportParser:
                     value = (raw[i] - zero[i]) * degrees / (scale[i] - zero[i])
                 else:
                     value = (raw[i] - self.gyro_zero[i]) / 13.768 * (1 if slow[i] else 2000 / 440)
-                values.append(value - self.gyro_bias[i])
+                values.append((value - self.gyro_bias[i]) * self.gyro_scale[i])
             s.gyro_raw, s.gyro_dps, s.gyro_timestamp_us = raw, tuple(values), now
+            s.orientation = list(self.orientation.update(s.accel_g, s.gyro_dps, now))
             if not p[4] & 1:
                 s.nunchuk = None
             return

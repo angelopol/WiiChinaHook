@@ -16,6 +16,7 @@ import logging
 import threading
 import time
 
+from .calibration import GYRO_SCALE_FRAME
 from .session import ReportError, WiimoteSession
 from .wiimote import AccelCalibration, WiimoteState
 
@@ -254,6 +255,9 @@ class DolphinBarManager:
         session.parser.gyro_bias = tuple(settings.get("gyro_bias", (0.0, 0.0, 0.0)))
         if "gyro_bias" in settings:
             state.calibration["gyro_bias"] = list(session.parser.gyro_bias)
+        if settings.get("gyro_scale_frame") == GYRO_SCALE_FRAME:  # older factors used wrong axes
+            session.parser.gyro_scale = tuple(settings["gyro_scale"])
+            state.calibration["gyro_scale"] = list(session.parser.gyro_scale)
         self.sessions[slot] = session
         link.on("close", lambda: self.spawn(self.drop(slot, "Remote disconnected from the DolphinBar"))
                 if self.sessions.get(slot) is session else None)
@@ -297,4 +301,10 @@ class DolphinBarManager:
         session = self.session_for(slot)
         result = await session.calibrate()
         self.store.update(slot, gyro_bias=list(session.parser.gyro_bias))
+        return result
+
+    async def calibrate_axis(self, slot, axis):
+        session = self.session_for(slot)
+        result = await session.calibrate_axis(axis)
+        self.store.update(slot, gyro_scale=list(session.parser.gyro_scale), gyro_scale_frame=GYRO_SCALE_FRAME)
         return result

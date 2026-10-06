@@ -43,6 +43,9 @@ def main() -> None:
     hook.add_argument("--slot", type=int, help="DSU slot, default 0")
     hook.add_argument("--dsu-mac", help="MAC reported to DSU clients")
 
+    gui = subparsers.add_parser("gui", help="open the graphical app (needs the [gui] extra)")
+    gui.add_argument("--config", default="config.local.json", help="path to JSON config")
+
     scan = subparsers.add_parser("scan-wiimotes", help="scan Bluetooth Classic devices with Bumble")
     scan.add_argument("--transport", default="usb:8087:0a2a", help="Bumble USB selector")
     scan.add_argument("--seconds", type=float, default=12.0, help="scan duration")
@@ -130,9 +133,19 @@ def main() -> None:
             client.add_argument("--mask", type=parse_int, required=True)
         if name == "rumble":
             client.add_argument("--duration-ms", type=int, default=500)
+        if name == "calibrate":
+            client.add_argument("--axis", choices=("pitch", "roll", "yaw"),
+                                help="MotionPlus scale/sign calibration of one axis instead of the bias")
     args = parser.parse_args()
     logging.basicConfig(level=logging.DEBUG if getattr(args, "verbose", False) else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    if args.command == "gui":
+        try:
+            from .gui.app import run as run_gui
+        except ImportError as exc:
+            raise SystemExit(f"GUI unavailable ({exc}). Install it with: pip install -e .[gui]") from exc
+        run_gui(args.config)
+        return
     if args.command in ("pair", "devices", "forget", "monitor", "calibrate", "led", "rumble"):
         asyncio.run(command_api(args))
         return
@@ -190,8 +203,10 @@ async def command_hook(args: argparse.Namespace) -> None:
 async def command_api(args):
     from websockets.asyncio.client import connect
     values = {k: v for k, v in vars(args).items() if k not in ("command", "url") and v is not None}
-    request = {"v": 1, "id": 1, "command": "subscribe" if args.command == "monitor" else args.command,
-               "args": values}
+    command = "subscribe" if args.command == "monitor" else args.command
+    if command == "calibrate" and "axis" in values:
+        command = "calibrate_axis"
+    request = {"v": 1, "id": 1, "command": command, "args": values}
     try:
         async with connect(args.url, open_timeout=5, max_size=262144) as websocket:
             await websocket.send(json.dumps(request))

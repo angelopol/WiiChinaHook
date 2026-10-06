@@ -15,9 +15,12 @@ dependencies = [
 
 [project.scripts]
 wiichinahook = "wiichinahook.cli:main"
+wiichinahook-gui = "wiichinahook.gui.app:main"
 
 [project.optional-dependencies]
 test = ["pytest==9.1.1", "pytest-asyncio==1.4.0"]
+gui = ["flet==1.0.3", "flet-desktop==1.0.3"]
+dev = ["pillow==12.3.0"]  # tools/make_calibration_gifs.py
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -33,3 +36,6 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+wiichinahook = ["gui/assets/*.gif"]

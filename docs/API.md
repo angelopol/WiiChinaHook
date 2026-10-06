@@ -1,0 +1,86 @@
+# Local API v1
+
+*English · [Español](API.es.md)*
+
+JSON over WebSocket at `ws://127.0.0.1:26761`. Each request carries `v`, `id`,
+`command` and optionally `args`. The server replies with the same `id` and `ok`.
+
+```json
+{"v":1,"id":1,"command":"devices"}
+{"v":1,"id":2,"command":"pair","args":{"seconds":30,"mode":"sync"}}
+{"v":1,"id":3,"command":"subscribe"}
+{"v":1,"id":4,"command":"led","args":{"slot":0,"mask":16}}
+{"v":1,"id":5,"command":"rumble","args":{"slot":0,"duration_ms":500}}
+{"v":1,"id":6,"command":"calibrate","args":{"slot":0}}
+{"v":1,"id":7,"command":"forget","args":{"slot":0}}
+{"v":1,"id":8,"command":"calibrate_axis","args":{"slot":0,"axis":"pitch"}}
+```
+
+`calibrate_axis` (axis `pitch`, `roll` or `yaw`) runs the guided MotionPlus scale
+calibration described in the README and replies after about 7 s with `factor`,
+`rotation_deg`, `correlation` and the new `gyro_scale`; it fails with a message when
+the axis was not horizontal, the turn was too small or the remote moved at the start.
+
+`pair` also accepts `address` and `mode: "temporary"`. Its reply confirms that the
+pairing window was scheduled, not that a remote is already connected. `devices` and
+the `subscribe` reply contain `adapter`, `mode` (`dolphinbar` or `bluetooth`),
+`ready`, `error`, `pairing` and `devices`.
+
+In `dolphinbar` mode, `pair` returns an error (remotes are paired on the bar),
+`forget` deletes the slot's stored settings, and `address` is a fixed locally
+administered MAC per slot (`02:00:44:42:00:0N`) because the bar does not expose the
+remote's address.
+
+Valid slots: 0–3. LED takes a mask 0x10–0xF0 (high bits only); rumble duration:
+0–5000 ms. Zero stops the motor.
+
+```json
+{"v":1,"id":4,"ok":true,"result":{"slot":0}}
+{"v":1,"id":4,"ok":false,"error":{"code":"request_failed","message":"Slot is not connected"}}
+```
+
+After `subscribe`, events arrive:
+
+```json
+{"v":1,"event":"state","data":{"address":"00:11:22:33:44:55","slot":0,"connected":true,"phase":"ready","buttons":8}}
+```
+
+The example is abbreviated. The full state contains:
+
+| Field | Meaning |
+|---|---|
+| `phase`, `error` | disconnected, connecting, authenticating, opening, initializing or ready; last error |
+| `capabilities` | buttons, accelerometer, ir, motionplus, nunchuk |
+| `buttons` | 16-bit Wii mask; accelerometer bits removed |
+| `battery` | Fraction 0–1 or null |
+| `accel_raw`, `accel_g` | Three Wii axes X/Y/Z, raw 10-bit and in g |
+| `gyro_raw`, `gyro_dps` | Yaw, roll, pitch; raw and degrees/second |
+| `orientation` | Body-to-world quaternion `[w,x,y,z]`; null without data (see below) |
+| `ir` | Four points `{x,y,size}`; invisible point = null; sensor without reading = null |
+| `nunchuk` | Normalized `stick` [-1,1], `stick_raw`, `c`, `z`, `accel_raw`, `accel_g` |
+| `extension` | null, nunchuk, motionplus or motionplus+nunchuk |
+| `timestamp_us` | Monotonic time of the last report/state in microseconds |
+| `accel_timestamp_us`, `gyro_timestamp_us`, `ir_timestamp_us`, `nunchuk_timestamp_us` | Time of each sample; 0 before the first one |
+| `calibration` | Calibration sources, manual gyro bias and `gyro_scale` (yaw, roll, pitch factors), if any |
+
+**Axes.** `accel_g` uses the raw Wii frame, which is right-handed: +X to the remote's
+**left**, +Y towards the **back** (the 1/2 buttons end), +Z out of the buttons face.
+Lying face up it reads Z = +1 g; pointing at the ceiling, Y = −1 g. `gyro_dps` rates are
+right-handed about the same axes: pitch + = tip down, roll + = left side down, yaw + =
+counter-clockwise seen from above (Dolphin's IMU uses this frame too). `orientation`
+uses the body frame X right, Y tip, Z buttons face (the raw frame turned 180° about Z)
+and maps it to a world with X right, Y towards the screen and Z up. With a MotionPlus it is estimated
+by a complementary filter at the full report rate; the heading (yaw) has no absolute
+reference and drifts. Without MotionPlus it reflects accelerometer tilt only (yaw 0).
+
+Times are process-monotonic, not UTC dates. Samples are kept across interleaved
+reports and each sensor keeps its own time. Measurements are cleared on disconnect.
+Basic IR yields `size: null`; its coordinates are raw, not a screen cursor. DSU axes
+are adapted at the output boundary to Dolphin's DSU client (`DualShockUDPClient.cpp`):
+acceleration `(X, −Z, −Y)` and gyro `(−pitch, −yaw, −roll)`, i.e. x left, y down, z forward,
+pitch up, yaw right, roll right.
+
+Telemetry events are coalesced to at most 60 Hz per remote. Slow clients receive the
+latest state; this is not a lossless capture channel. Use `.btsnoop` to inspect every
+packet. Requests are limited to 16 KiB. Close the WebSocket to stop a subscription.
+Commands run in the process that owns the adapter, avoiding a second USB open.

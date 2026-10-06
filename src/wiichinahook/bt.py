@@ -20,6 +20,7 @@ from .session import WiimoteSession
 from .storage import Registry
 from .wiimote import WiimoteState
 from .bumble_compat import install_l2cap_hint_compat
+from .calibration import GYRO_SCALE_FRAME
 
 log = logging.getLogger(__name__)
 
@@ -199,7 +200,9 @@ class WiimoteManager:
 
     async def reconnect_loop(self):
         while True:
-            for address in list(self.registry.devices):
+            # Paging blocks inquiry (COMMAND_DISALLOWED): no reconnects while pairing.
+            pairing = time.monotonic() < self.pair_until
+            for address in ([] if pairing else list(self.registry.devices)):
                 if address not in self.sessions and address not in self.connecting and time.monotonic() >= self.retry_after.get(address, 0):
                     await self.connect(address)
             await asyncio.sleep(3)
@@ -251,6 +254,9 @@ class WiimoteManager:
         session.incoming = address in self.incoming
         self.incoming.discard(address)
         session.parser.gyro_bias = tuple(entry.get("gyro_bias", (0.0, 0.0, 0.0)))
+        if entry.get("gyro_scale_frame") == GYRO_SCALE_FRAME:  # older factors used wrong axes
+            session.parser.gyro_scale = tuple(entry["gyro_scale"])
+            state.calibration["gyro_scale"] = list(session.parser.gyro_scale)
         self.sessions[address] = session
         connection.on("disconnection", lambda reason: self.spawn(self.disconnected(address, session, reason)) if self.adapter_active else None)
         self.spawn(self.start_session(address, session, entry))
@@ -346,8 +352,8 @@ class WiimoteManager:
                 if address:
                     self.spawn(self.connect(address))
                 else:
-                    await self.device.start_discovery(auto_restart=True)
-                await asyncio.sleep(seconds)
+                    await self.start_discovery_when_idle()
+                await asyncio.sleep(max(0.0, self.pair_until - time.monotonic()))
             finally:
                 self.pair_until = 0
                 if self.device:
@@ -356,6 +362,18 @@ class WiimoteManager:
                     with contextlib.suppress(Exception):
                         await self.device.set_discoverable(False)
         self.pair_task = self.spawn(window())
+
+    async def start_discovery_when_idle(self):
+        # A page started by the reconnect loop just before the window opened makes
+        # the controller reject inquiry; retry until that page ends (<= ~5 s).
+        while True:
+            try:
+                await self.device.start_discovery(auto_restart=True)
+                return
+            except hci.HCI_Error as exc:
+                if exc.error_code != hci.HCI_COMMAND_DISALLOWED_ERROR or time.monotonic() >= self.pair_until:
+                    raise
+                await asyncio.sleep(0.5)
         return {"seconds": seconds, "mode": mode}
 
     def session_for(self, slot):
@@ -390,5 +408,13 @@ class WiimoteManager:
         session = self.session_for(slot)
         result = await session.calibrate()
         self.registry.devices[session.state.address]["gyro_bias"] = list(session.parser.gyro_bias)
+        self.registry.save()
+        return result
+
+    async def calibrate_axis(self, slot, axis):
+        session = self.session_for(slot)
+        result = await session.calibrate_axis(axis)
+        self.registry.devices[session.state.address].update(gyro_scale=list(session.parser.gyro_scale),
+                                                            gyro_scale_frame=GYRO_SCALE_FRAME)
         self.registry.save()
         return result

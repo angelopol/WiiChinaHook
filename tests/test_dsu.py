@@ -68,8 +68,10 @@ def test_udp_port_query_and_sensor_mapping(server):
     assert packet[20:22] == bytes([0,255])
     assert packet[17] & 5 == 5
     assert packet[33] == 255 and packet[35] == 255
-    assert struct.unpack_from("<fff",packet,56) == (1.,3.,2.)
-    assert struct.unpack_from("<fff",packet,68) == (30.,10.,20.)
+    # Dolphin reads DSU x as left, -y as up, z as forward, and pitch/yaw/roll as
+    # up/right/right; the Wii frame is X left, Y back, Z up (MotionPlus right-handed).
+    assert struct.unpack_from("<fff",packet,56) == (1.,-3.,-2.)
+    assert struct.unpack_from("<fff",packet,68) == (-30.,-10.,-20.)
     assert struct.unpack_from("<Q",packet,48)[0] == 12345
     client=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
     client.settimeout(1)

@@ -155,3 +155,46 @@ async def test_incoming_acl_is_accepted_as_central(tmp_path):
     device.on_connection_request(address, 0x002504, hci.HCI_Connection_Complete_Event.LinkType.ACL)
     assert sent[0].role == 0x00 and address in device.pending_connections
     assert "00:11:22:33:44:55" in manager.incoming
+
+
+def test_save_config_round_trips_and_keeps_unknown_keys(tmp_path):
+    from dataclasses import replace
+    from wiichinahook.config import DongleConfig, DsuConfig, WiimoteConfig, save_config
+    path = tmp_path / "config.local.json"
+    path.write_text('{"custom": 1, "wiimote": {"address": "00:11:22:33:44:55"}}')
+    config = replace(load_config(path), mode="bluetooth",
+                     dongle=DongleConfig(0x0A12, 0x0001, "usb:0a12:0001"),
+                     wiimotes=(WiimoteConfig("00:17:AB:AE:1A:6D", 1, "sync", 0x20),),
+                     dsu=DsuConfig("127.0.0.1", 26770), ir=False)
+    save_config(config, path)
+    assert load_config(path) == config
+    assert json.loads(path.read_text())["custom"] == 1
+
+
+def test_save_config_refuses_invalid_values(tmp_path):
+    from dataclasses import replace
+    from wiichinahook.config import save_config
+    path = tmp_path / "config.local.json"
+    save_config(AppConfig(), path)
+    good = path.read_text()
+    with pytest.raises(ValueError):
+        save_config(replace(AppConfig(), mode="usb"), path)
+    assert path.read_text() == good
+
+
+async def test_pairing_retries_inquiry_while_a_page_is_in_progress(tmp_path):
+    manager = WiimoteManager(AppConfig(), lambda s: None)
+    manager.registry = Registry(tmp_path, "11:22:33:44:55:66")
+    manager.ready.set()
+    attempts = []
+    async def start_discovery(auto_restart):
+        attempts.append(time.monotonic())
+        if len(attempts) < 3:
+            raise hci.HCI_Error(hci.HCI_COMMAND_DISALLOWED_ERROR)
+    manager.device = SimpleNamespace(set_discoverable=AsyncMock(), start_discovery=start_discovery,
+                                     stop_discovery=AsyncMock())
+    await manager.pair(seconds=3)
+    await asyncio.sleep(1.4)
+    assert len(attempts) == 3 and time.monotonic() < manager.pair_until
+    manager.pair_task.cancel()
+    await asyncio.gather(manager.pair_task, return_exceptions=True)

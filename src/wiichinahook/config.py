@@ -111,3 +111,46 @@ def load_config(path: str | Path) -> AppConfig:
         path.parent / data.get("state_dir", ".wiichinahook"),
         bool(data.get("ir", True)), bool(data.get("motionplus", True)),
     )
+
+
+def config_to_dict(config: AppConfig, base_dir: Path | None = None) -> dict:
+    """Inverse of load_config: a JSON-ready dict that loads back to `config`."""
+    state_dir = config.state_dir
+    if base_dir is not None:
+        try:
+            state_dir = state_dir.relative_to(base_dir)
+        except ValueError:
+            pass
+    dongle = {"vid": f"0x{config.dongle.vid:04x}", "pid": f"0x{config.dongle.pid:04x}"}
+    if config.dongle.transport:
+        dongle["transport"] = config.dongle.transport
+    remotes = []
+    for remote in config.wiimotes:
+        entry = {"address": remote.address, "slot": remote.slot, "pin_mode": remote.pin_mode}
+        if remote.led_mask is not None:
+            entry["led_mask"] = f"0x{remote.led_mask:02x}"
+        remotes.append(entry)
+    return {
+        "mode": config.mode,
+        "dongle": dongle,
+        "wiimotes": remotes,
+        "dsu": {"host": config.dsu.host, "port": config.dsu.port},
+        "api": {"host": config.api.host, "port": config.api.port},
+        "state_dir": state_dir.as_posix(),
+        "ir": config.ir,
+        "motionplus": config.motionplus,
+    }
+
+
+def save_config(config: AppConfig, path: str | Path) -> None:
+    """Write `config`, keeping keys this version does not know, then validate it."""
+    path = Path(path)
+    data = {}
+    if path.exists():
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data.pop("wiimote", None)  # legacy single-remote key is superseded by "wiimotes"
+    data.update(config_to_dict(config, path.parent))
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    load_config(temporary)  # refuse to replace a good file with an invalid one
+    temporary.replace(path)

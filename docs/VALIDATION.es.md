@@ -1,5 +1,7 @@
 # Validación
 
+*[English](VALIDATION.md) · Español*
+
 ## Comprobado automáticamente
 
 - Reportes de botones, bits bajos de aceleración, IR básico/extendido, estado,
@@ -11,7 +13,13 @@
 - DSU con sockets locales, CRC, selección por slot/MAC y expiración.
 - WebSocket real: versión, errores, comandos y suscripciones.
 - Reintentos con backoff, borrado de clave rechazada y aceptación entrante como
-  central.
+  central; búsqueda reintentada mientras otro mando está siendo llamado.
+- Transporte DolphinBar simulado con el comportamiento capturado (lecturas perdidas,
+  relleno `0x30`, formatos MotionPlus/Nunchuk).
+- Filtro de orientación: convenciones de signo, corrección por gravedad y
+  reproducción de una captura real del clon (`tests/data/clone_axes_capture.json`).
+- GUI sin ventana: modelo, traducciones, ciclo de vida del servicio, conexión a un
+  servicio ya en marcha, tarjetas de slot y proyección 3D; detección de adaptadores.
 
 Salvo los marcados abajo como capturas, los vectores son sintéticos.
 
@@ -69,11 +77,62 @@ Mayflash DolphinBar (`0079:1802` en modo 1; en modo 4, cuatro HID `057E:0306`).
 | IR | OK, 2 puntos (la barra es la fuente IR) |
 | Acelerómetro | 1,0 g en reposo con la calibración típica (la de fábrica del clon) |
 | App completa (`hook`) | Ranura detectada en < 0,1 s, lista en ~4 s, `calibrate` guardado, DSU con MAC local, cierre inmediato |
+| Salir y volver | Mando apagado: ranura desconectada; al encenderlo, lista de nuevo en ~1 s |
 | Mando fuera de la barra | La ranura vacía sigue emitiendo `0x30` de relleno; la vigilancia usa los reportes del modo configurado |
 
 El formato de escritura `0x16` es `[espacio|0x02][dirección 3 bytes][tamaño][16 datos]`.
 Las primeras pruebas manuales duplicaron el byte de espacio y concluyeron, por error,
 que el MotionPlus no se activaba por la barra.
+
+### Ejes del MotionPlus (captura guiada, 2026-10-06)
+
+Clon por la DolphinBar, mando en reposo y después alabeo, cabeceo y un giro completo
+antihorario sobre la mesa.
+
+| Movimiento | Resultado |
+|---|---|
+| Cabeceo (levantar la punta) | Acelerómetro Y → +0,81; correlación +0,99 entre el ángulo de gravedad y el *pitch* integrado |
+| Alabeo | Correlación −0,65 con el ángulo de gravedad X/Z crudo: coherente con *roll* + = bajar el lado izquierdo |
+| Giro antihorario | *yaw* integrado +469°, roll/pitch ≈ 0 |
+
+Esta captura por sí sola se interpretó mal: su primera excursión de cabeceo se tomó por
+"levantar la punta". Una prueba guiada posterior con posturas mantenidas (punta al techo:
+Y = −1 g; lado derecho abajo: X = +1 g), la foto del usuario de lado (X = −1 g con la
+punta a la izquierda y los botones hacia el jugador) y la calibración de escala por
+gravedad (los tres factores positivos en este sistema) lo resuelven: el sistema crudo es
+dextrógiro con +X = izquierda, +Y = atrás (extremo de los botones 1/2), +Z = cara de
+botones, y *pitch*/*roll*/*yaw* del MotionPlus son dextrógiros sobre esos ejes (*pitch* + =
+bajar la punta, *roll* + = bajar el lado izquierdo, *yaw* + = antihorario). Es también el
+sistema de la IMU de Dolphin (`IMUAccelerometer.cpp`, `IMUGyroscope.cpp`). La escala nominal del clon es demasiado alta: el *pitch*
+integrado es 1,85× el ángulo de gravedad y el giro completo dio 469° en vez de 360°.
+Con la escala 1/1,85 el filtro sigue el cabeceo con un error mediano de 2,6°.
+
+### GUI (2026-10-06)
+
+Probada por el usuario en ambos modos: conexión, botones, acelerómetro, MotionPlus,
+LEDs y vibración. Cierre con la X: servicio detenido y sin procesos huérfanos.
+
+### Adaptador clon "CSR 4.0" `0A12:0001` (2026-10-06)
+
+`bcdDevice 0x8891`. Su descriptor declara dos veces la configuración alternativa 5
+de la interfaz 1. Windows no lo inicia con libusbK ni WinUSB (Código 10,
+`STATUS_INVALID_DEVICE_REQUEST`) y UsbDk 1.0.22 lo enumera pero no puede redirigirlo.
+No soportado.
+
+### Ejes DSU (2026-10-06)
+
+Deducidos del código de Dolphin (`DualShockUDPClient.cpp` e `IMUAccelerometer.cpp`):
+"Accel Up" = −y, "Accel Left" = +x, "Accel Forward" = +z, y en reposo Dolphin espera
++1 g hacia arriba; "Gyro Pitch Up" = +pitch, "Roll Right" = +roll, "Yaw Right" = +yaw.
+Sus grupos IMU los combinan como x = Left − Right, y = Backward − Forward, z = Up − Down
+y x = PitchDown − PitchUp, y = RollLeft − RollRight, z = YawLeft − YawRight: el sistema
+del Wii. Por eso DSU envía `(X, −Z, −Y)` y `(−pitch, −yaw, −roll)`. Falta confirmarlo en
+el propio Dolphin (ver abajo).
+
+### Calibración de escala del MotionPlus
+
+Ajuste contra la gravedad probado con giros simulados sobre cada eje (escala 1,85,
+signos invertidos, sesgo) y con la captura real de cabeceo del clon (factor ≈ 1/1,85).
 
 ## Matriz física pendiente
 
@@ -81,11 +140,12 @@ que el MotionPlus no se activaba por la barra.
 |---|---|
 | Sesión de 30 min | Sin bloqueos; muestras continuas y recuperación tras desconexión |
 | Aceleración | Cerca de 1 g en el eje vertical, seis orientaciones |
-| MotionPlus | Signo correcto de tres giros conocidos |
+| Escala del MotionPlus | Tras `calibrate --axis` en los tres ejes, un giro de 90° se mide ≈ 90° |
+| DSU en Dolphin | Wiimote emulado con movimiento por DSU: en reposo la gravedad apunta hacia abajo en los indicadores de Dolphin; al inclinar o girar se mueven en el mismo sentido |
+| Orientación en la GUI | El modelo 3D sigue al mando en los tres ejes; deriva lenta de la dirección |
 | IR | Cuatro puntos como máximo; desaparecen al cubrir la cámara |
 | Nunchuk | Retirar/insertar con y sin MotionPlus |
-| Cuatro mandos | Slots persistentes, sin cruces de datos/LED/vibración (en ambos modos) |
-| DolphinBar: salir y volver | Apagar el mando: ranura desconectada en ~10 s; volver a encenderlo: reconectado |
+| Varios mandos | Slots persistentes, sin cruces de datos/LED/vibración (en ambos modos) |
 | USB retirado | Estados desconectados y recuperación al insertar |
 | Regreso a Dolphin | Cerrar hook y recuperar el adaptador desde Dolphin |
 

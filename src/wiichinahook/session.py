@@ -46,6 +46,7 @@ class WiimoteSession:
         self.last_data = time.monotonic()
         self.last_extension_probe = 0.0
         self.gyro_samples = None
+        self.axis_samples = None
         self.motionplus_port_connected = None
         self.last_status = time.monotonic()
 
@@ -161,6 +162,9 @@ class WiimoteSession:
         if self.gyro_samples is not None and self.state.gyro_timestamp_us == self.state.timestamp_us:
             if all(self.parser.gyro_slow):
                 self.gyro_samples.append(self.state.gyro_dps)
+        new_gyro = self.state.gyro_timestamp_us == self.state.timestamp_us
+        if self.axis_samples is not None and new_gyro and self.state.accel_g:
+            self.axis_samples.append((self.state.gyro_timestamp_us / 1e6, self.state.accel_g, self.state.gyro_dps))
         if report == 0x20:
             self.last_status = time.monotonic()
         requested_status = pending is not None and pending["report"] == 0x20
@@ -431,12 +435,42 @@ class WiimoteSession:
             axes = list(zip(*samples))
             if any(statistics.pstdev(axis) > 2 for axis in axes):
                 raise ValueError("Controller moved during calibration")
-            self.parser.gyro_bias = tuple(old + statistics.mean(axis) for old, axis in zip(self.parser.gyro_bias, axes))
+            # gyro_dps is already scaled; the bias lives in nominal units.
+            self.parser.gyro_bias = tuple(old + statistics.mean(axis) / scale for old, axis, scale
+                                          in zip(self.parser.gyro_bias, axes, self.parser.gyro_scale))
             self.state.calibration["gyro_bias"] = list(self.parser.gyro_bias)
             self.publish(self.state)
             return self.state.calibration
         finally:
             self.gyro_samples = None
+
+    async def calibrate_axis(self, axis, still=1.2, turn=5.0):
+        """Guided scale/sign calibration of one MotionPlus axis (see calibration.py).
+        Rumble cues: short = keep still, short again = turn slowly about the axis and
+        hold, long = done."""
+        from .calibration import fit_axis_scale
+        if not self.state.capabilities["motionplus"]:
+            raise ValueError("No MotionPlus detected")
+        if self.gyro_samples is not None or self.axis_samples is not None:
+            raise ValueError("Calibration already running")
+        await self.rumble(200)
+        await asyncio.sleep(0.3)  # let the rumble motor stop before measuring "still"
+        self.axis_samples = []
+        try:
+            await asyncio.sleep(still)
+            await self.rumble(200)
+            await asyncio.sleep(turn)
+            samples = self.axis_samples
+        finally:
+            self.axis_samples = None
+        await self.rumble(600)
+        result = fit_axis_scale(samples, axis, still_seconds=still - 0.1)
+        scale = list(self.parser.gyro_scale)
+        scale[result["channel"]] *= result["factor"]
+        self.parser.gyro_scale = tuple(scale)
+        self.state.calibration["gyro_scale"] = [round(v, 4) for v in scale]
+        self.publish(self.state)
+        return dict(result, gyro_scale=self.state.calibration["gyro_scale"])
 
     async def close(self):
         if self.closed:
