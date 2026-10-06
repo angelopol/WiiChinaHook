@@ -1,8 +1,13 @@
 # WiiChinaHook
 
-Aplicación experimental para Windows que controla un adaptador Bluetooth USB con
-libusbK, conecta hasta cuatro Wiimotes y publica controles/movimiento por DSU y
-datos Wii completos por WebSocket. No requiere ejecutar Dolphin.
+Aplicación experimental para Windows que conecta hasta cuatro Wiimotes (incluidos
+clones con MotionPlus integrado) y publica controles/movimiento por DSU y datos Wii
+completos por WebSocket. No requiere ejecutar Dolphin. Dos modos de conexión:
+
+| Modo | Hardware | Uso |
+|---|---|---|
+| `dolphinbar` (por defecto) | Mayflash DolphinBar en **modo 4** | El Bluetooth del PC sigue libre para Windows |
+| `bluetooth` | Adaptador USB con **libusbK** (Intel `8087:0A2A`) | Passthrough propio con Bumble; el adaptador queda reservado |
 
 ## Instalación
 
@@ -14,19 +19,48 @@ py -3.13 -m venv .venv
 .venv\Scripts\python -m pip install -e . --no-deps
 ```
 
-El adaptador de referencia es Intel `8087:0A2A` con **libusbK 3.1.0.0**.
-No cambies ese controlador. Cierra la emulación de Dolphin antes de usar el hook:
-solo un programa debe controlar el adaptador. Para volver a Dolphin, cierra el hook.
+Cierra Dolphin antes de usar el hook: solo un programa debe controlar la DolphinBar
+o el adaptador. Para volver a Dolphin, cierra el hook.
 
-## Uso
+## Uso con la DolphinBar (modo por defecto)
+
+1. Pon la DolphinBar en **modo 4** (botón de modo hasta encender el LED 4). En ese
+   modo Windows ve cuatro dispositivos HID `057E:0306`, uno por ranura.
+2. Empareja cada mando en la barra: SYNC en la barra y después SYNC en el mando.
+3. Arranca el hook y consulta el estado:
+
+```powershell
+.venv\Scripts\python wiichinahook.py hook
+.venv\Scripts\python wiichinahook.py devices
+.venv\Scripts\python wiichinahook.py calibrate --slot 0
+```
+
+La ranura de la barra (0–3) es el slot de la app; un mando conectado se detecta en
+unos dos segundos y su desaparición en unos diez. `pair` no se usa en este modo.
+`calibrate` mide el sesgo del giroscopio (mando inmóvil) y lo guarda por ranura en
+`.wiichinahook/dolphinbar.json`; `forget --slot N` borra esos ajustes, no el
+emparejamiento de la barra.
+
+La barra descarta las respuestas de lectura de memoria de los clones, así que la app
+inicializa sin leer: detecta el Nunchuk por el reporte de estado y el MotionPlus por
+el formato de sus datos. La calibración del acelerómetro usa valores típicos
+(cero `0x80`, 1 g `0x9a`, los de fábrica del clon validado) y la del MotionPlus es
+nominal más el sesgo de `calibrate`. La barra no revela la dirección Bluetooth del
+mando: DSU publica una MAC local fija por ranura (`02:00:44:42:00:0N`).
+
+## Uso con Bluetooth passthrough (`--mode bluetooth`)
+
+El adaptador de referencia es Intel `8087:0A2A` con **libusbK 3.1.0.0**; mientras
+tenga ese controlador, Windows no puede usarlo como Bluetooth normal.
 
 En una terminal:
 
 ```powershell
-.venv\Scripts\python wiichinahook.py hook
+.venv\Scripts\python wiichinahook.py hook --mode bluetooth
 ```
 
-En otra terminal, abre una ventana de sincronización y pulsa el botón rojo **SYNC**:
+O fija `"mode": "bluetooth"` en `config.local.json`. En otra terminal, abre una
+ventana de sincronización y pulsa el botón rojo **SYNC**:
 
 ```powershell
 .venv\Scripts\python wiichinahook.py pair --seconds 30
@@ -62,8 +96,10 @@ del Wiimote. Espera a que finalicen intentos de conexión/sincronización para u
 
 ## Configuración
 
-`hook` utiliza `config.local.json` si existe; en caso contrario selecciona el
-Intel por VID/PID. Copia `config.example.json` para personalizarlo.
+`hook` utiliza `config.local.json` si existe; en caso contrario usa la DolphinBar.
+Copia `config.example.json` para personalizarlo. `mode` elige `dolphinbar` o
+`bluetooth`, y `--mode` en la línea de órdenes lo sustituye. El resto de esta
+sección (mandos precargados, `dongle`) solo afecta al modo `bluetooth`.
 
 Puedes precargar mandos:
 
@@ -78,7 +114,7 @@ Los slots guardados no se reasignan silenciosamente. Elimina un mando con `forge
 antes de cambiar su slot; retíralo también de la configuración si no deseas que
 se agregue de nuevo. Se acepta la configuración antigua con un objeto `wiimote`.
 `report_mode` antiguo deja de controlar la salida: ahora se elige según sensores.
-La MAC publicada por DSU siempre es la real del mando.
+En modo `bluetooth`, la MAC publicada por DSU es la real del mando.
 
 `dongle.transport` permite un selector explícito de Bumble, por ejemplo
 `usb:8087:0a2a#0`. Un `usb:0` antiguo acompañado de VID/PID se migra a selección

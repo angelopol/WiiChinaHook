@@ -1,7 +1,7 @@
 [project]
 name = "wiichinahook"
 version = "0.2.0"
-description = "Wiimote clone DSU hook for Windows using PyUSB and Bumble."
+description = "Wiimote clone DSU hook for Windows using a DolphinBar or PyUSB and Bumble."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -10,6 +10,7 @@ dependencies = [
     "libusb1==3.4.0",
     "libusb-package==1.0.26.4",
     "websockets==17.2",
+    "hidapi==0.15.0",
 ]
 
 [project.scripts]

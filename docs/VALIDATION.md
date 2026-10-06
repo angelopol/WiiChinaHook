@@ -55,6 +55,26 @@ basada en los bytes capturados:
 - La calibración de fábrica del MotionPlus y del acelerómetro del Nunchuk no es
   válida. Se usan valores nominales y `calibrate` para el sesgo del giroscopio.
 
+### DolphinBar, modo 4, mismo clon (2026-10-06)
+
+Mayflash DolphinBar (`0079:1802` en modo 1; en modo 4, cuatro HID `057E:0306`).
+
+| Prueba | Resultado |
+|---|---|
+| Datos, confirmaciones `0x22`, estado `0x20` | Llegan; ~235 reportes/s en modo `0x37` |
+| Lecturas de memoria `0x21` | **Ninguna llega**: la barra descarta las respuestas sin relleno del clon |
+| MotionPlus sin lecturas | OK con `a600f0=55` y `a600fe=04/05/07`, por `WriteFile` y `HidD_SetOutputReport`. En reposo da el mismo sesgo que por Bluetooth directo (5,6 / −4,7 / 11,2 °/s); giros de hasta ±900 °/s |
+| Nunchuk | OK: stick con recorrido completo, C, Z; en passthrough con MotionPlus |
+| Quitar/poner Nunchuk | Se refleja en el bit "extensión" de los paquetes MotionPlus; **no** llega reporte `0x20` |
+| IR | OK, 2 puntos (la barra es la fuente IR) |
+| Acelerómetro | 1,0 g en reposo con la calibración típica (la de fábrica del clon) |
+| App completa (`hook`) | Ranura detectada en < 0,1 s, lista en ~4 s, `calibrate` guardado, DSU con MAC local, cierre inmediato |
+| Mando fuera de la barra | La ranura vacía sigue emitiendo `0x30` de relleno; la vigilancia usa los reportes del modo configurado |
+
+El formato de escritura `0x16` es `[espacio|0x02][dirección 3 bytes][tamaño][16 datos]`.
+Las primeras pruebas manuales duplicaron el byte de espacio y concluyeron, por error,
+que el MotionPlus no se activaba por la barra.
+
 ## Matriz física pendiente
 
 | Prueba | Aceptación |
@@ -64,7 +84,8 @@ basada en los bytes capturados:
 | MotionPlus | Signo correcto de tres giros conocidos |
 | IR | Cuatro puntos como máximo; desaparecen al cubrir la cámara |
 | Nunchuk | Retirar/insertar con y sin MotionPlus |
-| Cuatro mandos | Slots persistentes, sin cruces de datos/LED/vibración |
+| Cuatro mandos | Slots persistentes, sin cruces de datos/LED/vibración (en ambos modos) |
+| DolphinBar: salir y volver | Apagar el mando: ranura desconectada en ~10 s; volver a encenderlo: reconectado |
 | USB retirado | Estados desconectados y recuperación al insertar |
 | Regreso a Dolphin | Cerrar hook y recuperar el adaptador desde Dolphin |
 

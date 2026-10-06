@@ -115,7 +115,7 @@ class WiimoteManager:
                (time.monotonic() < self.pair_until and len(self.registry.devices) < 4))
 
     def snapshot(self):
-        return {"adapter": self.adapter_address, "ready": self.ready.is_set(),
+        return {"adapter": self.adapter_address, "mode": "bluetooth", "ready": self.ready.is_set(),
                 "error": self.adapter_error, "pairing": time.monotonic() < self.pair_until,
                 "devices": [s.to_dict() for s in sorted(self.states.values(), key=lambda s: s.slot)]}
 

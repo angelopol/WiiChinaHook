@@ -15,8 +15,12 @@ y opcionalmente `args`. El servidor responde con el mismo `id` y `ok`.
 
 `pair` acepta también `address` y `mode: "temporary"`. Su respuesta confirma que
 se programó la ventana de sincronización, no que un mando ya esté conectado.
-`devices` y la respuesta de `subscribe` contienen `adapter`, `ready`, `error`,
-`pairing` y `devices`. Slots válidos: 0–3. LED usa máscara 0x10–0xF0 (solo bits
+`devices` y la respuesta de `subscribe` contienen `adapter`, `mode`
+(`dolphinbar` o `bluetooth`), `ready`, `error`, `pairing` y `devices`.
+
+En modo `dolphinbar`, `pair` devuelve error (los mandos se emparejan en la barra),
+`forget` borra los ajustes guardados de la ranura y `address` es una MAC local fija
+por ranura (`02:00:44:42:00:0N`), porque la barra no expone la del mando. Slots válidos: 0–3. LED usa máscara 0x10–0xF0 (solo bits
 altos); duración de vibración: 0–5000 ms. Cero apaga el motor.
 
 ```json

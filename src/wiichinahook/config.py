@@ -53,8 +53,14 @@ class ApiConfig:
     port: int = 26761
 
 
+MODES = ("dolphinbar", "bluetooth")
+
+
 @dataclass(frozen=True)
 class AppConfig:
+    # dolphinbar: Mayflash DolphinBar in mode 4 (default).
+    # bluetooth: Bumble passthrough on a libusbK adapter (dongle settings).
+    mode: str = "dolphinbar"
     dongle: DongleConfig = field(default_factory=DongleConfig)
     wiimotes: tuple[WiimoteConfig, ...] = ()
     dsu: DsuConfig = field(default_factory=DsuConfig)
@@ -94,7 +100,11 @@ def load_config(path: str | Path) -> AppConfig:
     vid, pid = parse_int(dongle.get("vid", 0x8087)), parse_int(dongle.get("pid", 0x0A2A))
     if vid is None or pid is None or not 0 <= vid <= 65535 or not 0 <= pid <= 65535:
         raise ValueError("USB VID/PID must be 0..65535")
+    mode = data.get("mode", "dolphinbar")
+    if mode not in MODES:
+        raise ValueError(f"mode must be one of {', '.join(MODES)}")
     return AppConfig(
+        mode,
         DongleConfig(vid, pid, transport),
         remotes, DsuConfig(dsu.get("host", "127.0.0.1"), int(dsu.get("port", 26760))),
         ApiConfig(api.get("host", "127.0.0.1"), int(api.get("port", 26761))),

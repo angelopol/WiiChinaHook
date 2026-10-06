@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from .api import ApiServer
-from .bt import WiimoteManager
 from .dsu import DsuServer
 
 
@@ -14,10 +13,14 @@ async def run_app(config, duration=None):
         dsu.send_state(state)
         if api:
             api.publish(state)
-    manager = WiimoteManager(config, publish)
+    if config.mode == "bluetooth":
+        from .bt import WiimoteManager as Manager
+    else:
+        from .dolphinbar import DolphinBarManager as Manager
+    manager = Manager(config, publish)
     try:
         api = await ApiServer(manager, config.api.host, config.api.port).start()
-        print(f"DSU {config.dsu.host}:{config.dsu.port}; API ws://{config.api.host}:{config.api.port}", flush=True)
+        print(f"Mode {config.mode}; DSU {config.dsu.host}:{config.dsu.port}; API ws://{config.api.host}:{config.api.port}", flush=True)
         async def poll():
             while True:
                 dsu.poll()

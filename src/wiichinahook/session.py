@@ -17,7 +17,7 @@ class ReportError(RuntimeError):
 
 
 class WiimoteSession:
-    def __init__(self, state, connection, publish, *, ir=True, motionplus=True):
+    def __init__(self, state, connection, publish, *, ir=True, motionplus=True, readable=True):
         self.state = state
         self.connection = connection
         self.publish = publish
@@ -31,6 +31,9 @@ class WiimoteSession:
         self.rumble_task = None
         self.tasks = set()
         self.want_ir, self.want_motionplus = ir, motionplus
+        # False behind a DolphinBar: it drops the clone's memory-read replies.
+        self.readable = readable
+        self.ext_probe = None
         self.ir_enabled = False
         self.initialized = False
         self.closed = False
@@ -38,6 +41,9 @@ class WiimoteSession:
         self.status_task = None
         self.mode = 0x30
         self.last_packet = time.monotonic()
+        # Reports of the configured mode only: an empty DolphinBar slot keeps
+        # emitting stale 0x30 reports, so any-report liveness would never expire.
+        self.last_data = time.monotonic()
         self.last_extension_probe = 0.0
         self.gyro_samples = None
         self.motionplus_port_connected = None
@@ -72,7 +78,9 @@ class WiimoteSession:
 
     def channel_closed(self):
         if not self.closed:
-            self.state.disconnect("HID channel closed")
+            # Keep the first cause (e.g. the watchdog's) when it closed the channel.
+            already = not self.state.connected and self.state.error
+            self.state.disconnect(self.state.error if already else "HID channel closed")
             self.publish(self.state)
             self.spawn(self.connection.disconnect())
 
@@ -120,6 +128,10 @@ class WiimoteSession:
             return
         self.last_packet = time.monotonic()
         report, p = data[1], data[2:]
+        if report == self.mode:
+            self.last_data = self.last_packet
+        if self.ext_probe is not None and report in (0x35, 0x37):
+            self.ext_probe.append(p[15:21] if report == 0x37 else p[5:11])
         self.parser.expire_samples(self.state.timestamp_us)
         pending = self.pending
         if pending and report == pending["report"] and not pending["future"].done():
@@ -192,7 +204,7 @@ class WiimoteSession:
         self.publish(self.state)
         await self.command(0x11, bytes([led_mask]))
         await self.command(0x15, b"\0", response=0x20)
-        for address in (0x16, 0x20):
+        for address in ((0x16, 0x20) if self.readable else ()):
             try:
                 self.parser.accel = AccelCalibration.from_bytes(await self.read(address, 10))
                 break
@@ -237,11 +249,14 @@ class WiimoteSession:
                     mode = 0x31
                 await self.command(0x12, bytes([0x04, mode]))
                 self.mode = mode
+                self.last_data = time.monotonic()
             finally:
                 if self.state.connected:
                     self.initialized = True
 
     async def configure_extensions(self):
+        if not self.readable:
+            return await self.configure_extensions_blind()
         self.last_extension_probe = time.monotonic()
         p, s = self.parser, self.state
         p.extension = s.extension = None
@@ -293,10 +308,72 @@ class WiimoteSession:
         s.extension = p.extension
         self.publish(s)
 
+    async def configure_extensions_blind(self):
+        """Identify extensions without memory reads (DolphinBar, 2026-10-06 tests):
+        the status flag reports a Nunchuk while MotionPlus is inactive, and an
+        active MotionPlus is recognised by the shape of the extension bytes."""
+        self.last_extension_probe = time.monotonic()
+        p, s = self.parser, self.state
+        p.extension = s.extension = None
+        s.nunchuk = s.gyro_dps = s.gyro_raw = None
+        s.nunchuk_timestamp_us = s.gyro_timestamp_us = 0
+        s.capabilities.update(motionplus=False, nunchuk=False)
+        p.nunchuk_calibration = None
+        # Deactivates MotionPlus and initialises an unencrypted Nunchuk; with an
+        # empty port the remote may answer these writes with an error.
+        with contextlib.suppress(ReportError):
+            await self.write(0x04A400F0, b"\x55")
+            await self.write(0x04A400FB, b"\x00")
+        await asyncio.sleep(0.05)
+        nunchuk = bool((await self.command(0x15, b"\0", response=0x20))[2] & 2)
+        motionplus = False
+        if self.want_motionplus:
+            try:
+                await self.write(0x04A600F0, b"\x55")
+                await self.write(0x04A600FE, bytes([5 if nunchuk else 4]))
+                await asyncio.sleep(0.3)
+                motionplus = await self.motionplus_active(nunchuk)
+            except ReportError:
+                motionplus = False
+            if not motionplus and nunchuk:
+                with contextlib.suppress(ReportError):  # restore plain Nunchuk data
+                    await self.write(0x04A400F0, b"\x55")
+                    await self.write(0x04A400FB, b"\x00")
+        if motionplus:
+            p.extension = "motionplus+nunchuk" if nunchuk else "motionplus"
+            s.capabilities["motionplus"] = True
+            s.calibration["motionplus"] = "nominal"
+        elif nunchuk:
+            p.extension = "nunchuk"
+        if nunchuk:
+            s.calibration["nunchuk"] = "nominal-stick/raw-accel"
+        s.capabilities["nunchuk"] = nunchuk
+        s.extension = p.extension
+        self.publish(s)
+
+    async def motionplus_active(self, nunchuk):
+        """MotionPlus packets end with bits ..10. In plain Nunchuk data those bits
+        are C/Z, so with a Nunchuk require the passthrough mix of MotionPlus (..10)
+        and Nunchuk (..00) packets, which holding buttons cannot produce."""
+        self.ext_probe = []
+        try:
+            await self.command(0x12, bytes([0x04, 0x37 if self.ir_enabled else 0x35]))
+            await asyncio.sleep(0.3)
+            samples = [e for e in self.ext_probe if len(e) == 6 and e != b"\xff" * 6]
+        finally:
+            self.ext_probe = None
+        if len(samples) < 10:
+            return False
+        kinds = [e[5] & 3 for e in samples]
+        share = lambda k: kinds.count(k) / len(kinds)
+        if nunchuk:
+            return share(2) >= 0.2 and share(0) >= 0.1
+        return share(2) >= 0.8
+
     async def watchdog(self):
         while not self.closed:
             await asyncio.sleep(2)
-            if time.monotonic() - self.last_packet > 10:
+            if time.monotonic() - self.last_data > 10 and not self.feature_lock.locked():
                 self.state.disconnect("No HID reports for 10 seconds")
                 self.publish(self.state)
                 await self.connection.disconnect()

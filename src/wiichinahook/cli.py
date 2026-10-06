@@ -31,7 +31,10 @@ def main() -> None:
 
     hook = subparsers.add_parser("hook", help="connect Wiimote and serve DSU")
     hook.add_argument("--config", default="config.local.json", help="path to JSON config")
-    hook.add_argument("--wiimote", help="Wiimote Bluetooth MAC address")
+    hook.add_argument("--mode", choices=("dolphinbar", "bluetooth"),
+                      help="dolphinbar (default): Mayflash DolphinBar in mode 4; "
+                           "bluetooth: Bumble passthrough on the libusbK adapter")
+    hook.add_argument("--wiimote", help="Wiimote Bluetooth MAC address (bluetooth mode)")
     hook.add_argument("--transport", help="Explicit Bumble selector, e.g. usb:8087:0a2a")
     hook.add_argument("--duration", type=float, help="Stop after this many seconds (diagnostics)")
     hook.add_argument("--verbose", action="store_true")
@@ -281,6 +284,10 @@ def config_from_args(args: argparse.Namespace) -> AppConfig:
         if args.config != "config.local.json":
             raise SystemExit(f"Config not found: {args.config}")
         config = AppConfig()
+    if args.mode:
+        config = replace(config, mode=args.mode)
+    if args.wiimote and config.mode != "bluetooth":
+        raise SystemExit("--wiimote requires --mode bluetooth; DolphinBar remotes pair on the bar")
     if args.wiimote:
         remote = WiimoteConfig(normalize_address(args.wiimote), args.slot if args.slot is not None else 0)
         config = replace(config, wiimotes=(remote,))
