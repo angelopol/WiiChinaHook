@@ -36,8 +36,9 @@ slots siguen conectados con datos neutros (10 paquetes por segundo en vez de uno
 con `+` (botones y/o sacudidas); en cada plantilla, `shake_wm` y `shake_nc` dan los umbrales
 por eje en g y `gyro_full_dps`/`gyro_full_dps_y` la sensibilidad horizontal/vertical del
 giroscopio. El campo `shakes` del estado (`seq` y los últimos eventos por slot con
-`device`, `axis` y `g`) sirve para ajustarlos; sticks `nc_stick`, `gyro`,
-`ir`. Tras `subscribe` llega `{"event":"gamepad","data":...}` cada vez que cambian el modo
+`device`, `axis` y `g`) sirve para ajustarlos; sticks `nc_stick`,
+`gyro_angle` (apuntado, se mantiene; `angle_full_deg`/`angle_full_deg_y` grados para el máximo),
+`gyro` (velocidad, vuelve al centro), `ir`. Tras `subscribe` llega `{"event":"gamepad","data":...}` cada vez que cambian el modo
 o sus avisos, y
 `{"event":"xbox","data":{"slot":0,"active":true,"buttons":["A"],"lt":0,"rt":1,"lx":0,"ly":0,"rx":0,"ry":0}}`
 cada vez que cambia la salida del mando virtual de un slot (`"active": false` si no tiene).
@@ -46,6 +47,12 @@ cada vez que cambia la salida del mando virtual de un slot (`"active": false` si
 máximo N eventos `state`/`xbox` por segundo y slot (1–60, por defecto 60), o 0 para
 pausarlos mientras los eventos `gamepad` siguen llegando; al reanudar se envía el estado
 más reciente. La GUI usa 30, y 0 mientras está oculta en la bandeja.
+
+`play_sound` (`{"slot": 0, "sound": "chime", "volume": 0.5}`) reproduce un sonido
+integrado (`beep`, `blip`, `chime`, `alert`, `count`) o la ruta de un `.wav` en el altavoz
+de ese mando. Responde al terminar con `slot`, `sound` y `seconds`, y un sonido nuevo corta
+el que esté sonando. `speaker_config` (`{"config": {...}}`) reemplaza los sonidos de
+eventos (`enabled`, `volume`, `events`); ver [SPEAKER.es.md](SPEAKER.es.md).
 
 `slot_options` cambia en vivo las opciones de calibración rápida y por barra sensora de un
 slot (solo los campos indicados; la respuesta los incluye todos) y `quick_calibrate`

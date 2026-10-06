@@ -6,6 +6,7 @@ import logging
 from .api import ApiServer
 from .dsu import DsuServer
 from .gamepad.xbox import GamepadHub
+from .speaker import SpeakerService
 
 log = logging.getLogger(__name__)
 
@@ -15,6 +16,24 @@ async def run_app(config, duration=None):
     api = None
     tasks = []
     hub = None
+    speaker = None
+    phases, low_battery = {}, set()
+
+    def speaker_events(state):
+        """Connected / low-battery cues (no-ops unless the speaker sounds are enabled)."""
+        slot, previous = state.slot, phases.get(state.slot)
+        phases[slot] = state.phase
+        if state.phase == "ready" and previous != "ready":
+            speaker.event(slot, "connect")
+        if not state.connected:
+            low_battery.discard(slot)
+        elif state.battery is not None:
+            if state.battery < 0.15 and slot not in low_battery:
+                low_battery.add(slot)
+                speaker.event(slot, "low_battery")
+            elif state.battery > 0.25:
+                low_battery.discard(slot)
+
     def publish(state):
         # DSU carries the remotes in the DSU mode; other modes keep DSU clients
         # connected but idle, so a game never gets the same remote twice.
@@ -26,6 +45,8 @@ async def run_app(config, duration=None):
                 hub.update(state)
             except Exception:  # a mapping bug must never stop DSU/API
                 log.exception("Gamepad mapping failed")
+        if speaker:
+            speaker_events(state)
     if config.mode == "bluetooth":
         from .bt import WiimoteManager as Manager
     else:
@@ -44,7 +65,10 @@ async def run_app(config, duration=None):
         except ValueError:
             pass
 
+    speaker = SpeakerService(config.speaker, config.state_dir.parent, manager.session_for)
+    manager.speaker = speaker
     hub = GamepadHub(config.gamepad, rumble=rumble, blink=blink, loop=asyncio.get_running_loop(),
+                     sound=lambda slot, mode: speaker.event(slot, "mode", count=mode),
                      on_change=lambda status: api.publish_gamepad(status) if api else None,
                      on_output=lambda output: api.publish_xbox(output) if api else None)
     manager.gamepad = hub

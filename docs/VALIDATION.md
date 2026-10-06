@@ -161,6 +161,7 @@ signs, bias) and with the real clone pitch capture (factor ≈ 1/1.85).
 | Driver switch | Settings → Adapter driver: Intel to libusbK and back to Windows Bluetooth, with UAC, no Zadig |
 | Quick calibration | Holding the combo ~0.6 s: double rumble when still (bias refreshed, recentered), long rumble when moving |
 | Sensor bar calibration | Pointing at the bar removes heading drift; **check the IR image sign** (turning left must keep the bar straight ahead) |
+| Speaker | **Sound** on a card: a clean chime over Bluetooth passthrough, then over the DolphinBar (does the bar forward `0x18`?); no stutter; the speaker is silent afterwards. Then the event sounds and a custom `.wav` ([SPEAKER.md](SPEAKER.md)) |
 | DSU mode | Following [the Dolphin guide](guides/dolphin.md): B + → switches to DSU and Dolphin's emulated Wii Remote gets buttons, Nunchuk, accelerometer and gyro; in mode 1 the DSU device stays connected but idle. Same with Cemu ([guide](guides/cemu.md)), "Use motion" on |
 | Xbox modes | B + arrows switch modes with N rumbles; game template drives a virtual Xbox controller (Windows "Game controllers" panel / a game); games' rumble reaches the Wiimote |
 | Xbox shakes / IR stick | Wiimote and Nunchuk shake directions and the IR right-stick vertical direction match the movement |

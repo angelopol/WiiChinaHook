@@ -210,3 +210,20 @@ def test_gamepad_tab_shows_the_dsu_mode_and_its_guides(tmp_path):
     assert tab.mode_type.value == "xbox" and "A" in tab.combos
     (tmp_path / "x.md").write_text("english", encoding="utf-8")
     assert load_guide("x", "es", [tmp_path]) == "english" and load_guide("y", "en", [tmp_path]) is None
+
+
+def test_speaker_settings_round_trip():
+    pytest.importorskip("flet")
+    from wiichinahook.gui.app import Controller
+    from wiichinahook.speaker import validate_speaker
+    controller = object.__new__(Controller)            # no page/service needed to build the section
+    controller.t = Translator("es")
+    controller.config = AppConfig(speaker=validate_speaker(
+        {"enabled": True, "volume": 0.3, "events": {"mode": "sonidos/modo.wav", "low_battery": None}}))
+    controls = controller.build_speaker_settings()
+    assert controls[0].value == "Altavoz (opcional)"
+    choice, path = controller.sound_rows["mode"]
+    assert choice.value == "custom" and path.visible and path.value == "sonidos/modo.wav"
+    assert controller.sound_rows["low_battery"][0].value == "off"
+    assert controller.speaker_form() == {"enabled": True, "volume": 0.3, "events": {
+        "connect": "chime", "mode": "sonidos/modo.wav", "low_battery": None}}

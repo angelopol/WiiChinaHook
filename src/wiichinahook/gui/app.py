@@ -18,6 +18,7 @@ import flet.canvas as cv
 from .. import autostart
 from ..config import COMBOS, AppConfig, SlotOptions, load_config, parse_int, save_config
 from ..orientation import from_axis_angle, multiply, reference_yaw
+from ..speaker import BUILTIN as BUILTIN_SOUNDS, EVENTS as SOUND_EVENTS, validate_speaker
 from .i18n import LANGUAGES, Translator
 from .model import (BUTTONS, BUTTON_LABELS, bar_value, config_from_form, fmt, form_from_config, nunchuk_accel,
                     ir_to_canvas, led_mask, pressed_buttons, stick_to_canvas)
@@ -108,6 +109,7 @@ class SlotCard:
         self.leds = [ft.Checkbox(value=i == slot % 4, on_change=self.on_led) for i in range(4)]
         self.action_controls = [
             ft.Button(t("rumble"), icon=ft.Icons.VIBRATION, on_click=self.on_rumble),
+            ft.Button(t("sound_test"), icon=ft.Icons.VOLUME_UP, on_click=self.on_sound, tooltip=t("sound_test_hint")),
             ft.Button(t("calibrate"), icon=ft.Icons.TUNE, on_click=self.on_calibrate, tooltip=t("calibrate_hint")),
             ft.Button(t("scale"), icon=ft.Icons.STRAIGHTEN, on_click=self.on_scale, tooltip=t("scale_hint")),
             ft.TextButton(t("forget"), icon=ft.Icons.DELETE_OUTLINE, on_click=self.on_forget),
@@ -235,6 +237,9 @@ class SlotCard:
     async def on_rumble(self, e):
         await self.controller.command("rumble", slot=self.slot, duration_ms=500)
 
+    async def on_sound(self, e):
+        await self.controller.command("play_sound", slot=self.slot, sound="chime")
+
     async def on_calibrate(self, e):
         self.controller.notify(self.t("calibrate_hint"))
         if await self.controller.command("calibrate", slot=self.slot) is not None:
@@ -348,6 +353,19 @@ class Controller:
         if self.tray and status.get("mode") != self.tray_mode:
             self.tray_mode = status.get("mode")
             self.tray.refresh()
+
+    async def update_speaker(self, speaker):
+        """Save the speaker sounds and apply them to the running service at once."""
+        try:
+            config = replace(self.load_config(), speaker=validate_speaker(speaker))
+            save_config(config, self.config_path)
+        except (OSError, ValueError) as exc:
+            self.notify(self.t("invalid", field=exc))
+            return False
+        self.config = config
+        if self.runtime.active:
+            await self.command("speaker_config", config=config.speaker)
+        return True
 
     async def update_gamepad(self, gamepad):
         """Save the Xbox modes and apply them to the running service at once."""
@@ -468,6 +486,7 @@ class Controller:
         self.on_mode_change(None)
         return ft.Column(scroll=ft.ScrollMode.AUTO, expand=True, spacing=14, controls=[
             *self.build_app_settings(), ft.Divider(),
+            *self.build_speaker_settings(), ft.Divider(),
             ft.Text(t("mode"), size=16, weight=ft.FontWeight.BOLD), self.mode_group,
             self.dolphinbar_help, self.bluetooth_box, ft.Divider(),
             ft.Row([self.fields["dsu_host"], self.fields["dsu_port"], self.fields["api_port"]], wrap=True),
@@ -485,6 +504,65 @@ class Controller:
         return [ft.Text(t("app_title"), size=16, weight=ft.FontWeight.BOLD),
                 ft.Row([self.autostart_switch, *prefs], wrap=True, spacing=24),
                 ft.Text(t("app_hint"), size=12, color=ft.Colors.ON_SURFACE_VARIANT)]
+
+    def build_speaker_settings(self):
+        """Optional speaker sounds: per event a built-in sound, a custom WAV or off."""
+        t = self.t
+        speaker = self.config.speaker
+        self.speaker_enabled = ft.Switch(label=t("speaker_enabled"), value=speaker["enabled"])
+        self.speaker_volume = ft.Slider(min=0, max=1, divisions=20, value=speaker["volume"], width=260,
+                                        label="{value}")
+        self.sound_rows = {}
+        rows = []
+        choices = [ft.DropdownOption("off", t("sound_off")),
+                   *[ft.DropdownOption(name, t(f"sound_{name}")) for name in BUILTIN_SOUNDS],
+                   ft.DropdownOption("custom", t("sound_custom"))]
+        for event in SOUND_EVENTS:
+            sound = speaker["events"].get(event)
+            kind = "off" if not sound else sound if sound in BUILTIN_SOUNDS else "custom"
+            path = ft.TextField(value=sound if kind == "custom" else "", label=t("sound_path"), width=360,
+                                dense=True, visible=kind == "custom")
+            choice = ft.Dropdown(value=kind, width=190, dense=True, options=choices)
+            choice.on_select = lambda e, path=path: self.on_sound_choice(e, path)
+            test = ft.IconButton(ft.Icons.PLAY_ARROW, tooltip=t("sound_try"),
+                                 on_click=lambda e, ev=event: self.page.run_task(self.try_sound, ev))
+            self.sound_rows[event] = (choice, path)
+            rows.append(ft.Row([ft.Text(t(f"sound_event_{event}"), width=170), choice, test, path],
+                               wrap=True, vertical_alignment=ft.CrossAxisAlignment.CENTER))
+        return [ft.Text(t("speaker_title"), size=16, weight=ft.FontWeight.BOLD),
+                ft.Text(t("speaker_hint"), size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+                ft.Row([self.speaker_enabled, ft.Text(t("speaker_volume")), self.speaker_volume], wrap=True,
+                       vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                *rows,
+                ft.Row([ft.FilledButton(t("save"), icon=ft.Icons.SAVE, on_click=self.on_speaker_save)])]
+
+    def on_sound_choice(self, e, path):
+        path.visible = e.control.value == "custom"
+        self.page.update()
+
+    def sound_choice(self, event):
+        choice, path = self.sound_rows[event]
+        if choice.value == "custom":
+            return path.value.strip() or None
+        return None if choice.value in (None, "off") else choice.value
+
+    def speaker_form(self):
+        return {"enabled": self.speaker_enabled.value, "volume": round(float(self.speaker_volume.value), 2),
+                "events": {event: self.sound_choice(event) for event in SOUND_EVENTS}}
+
+    async def on_speaker_save(self, e):
+        if await self.update_speaker(self.speaker_form()):
+            self.notify(self.t("saved", path=self.config_path))
+
+    async def try_sound(self, event):
+        """Play this event's selected sound on the first connected remote."""
+        sound = self.sound_choice(event)
+        slots = [slot for slot, state in sorted(self.states.items()) if state and state.get("connected")]
+        if not sound or not slots:
+            self.notify(self.t("sound_try_none"))
+            return
+        await self.command("play_sound", slot=slots[0], sound=sound,
+                           volume=round(float(self.speaker_volume.value), 2))
 
     def pref(self, key):
         return bool(self.prefs.get(key, APP_PREFS[key]))

@@ -164,6 +164,7 @@ signos invertidos, sesgo) y con la captura real de cabeceo del clon (factor ≈ 
 | Cambio de controlador | Ajustes → Controlador del adaptador: Intel a libusbK y de vuelta al Bluetooth de Windows, con UAC y sin Zadig |
 | Calibración rápida | Mantener la combinación ~0,6 s: doble vibración si está quieto (sesgo renovado y recentrado), larga si se mueve |
 | Calibración con la barra | Apuntar a la barra elimina la deriva del giro; **verificar el signo de la imagen IR** (al girar a la izquierda la barra debe seguir "de frente") |
+| Altavoz | **Sonido** en una tarjeta: campanilla limpia por Bluetooth passthrough y después por la DolphinBar (¿reenvía la barra los `0x18`?); sin cortes; el altavoz queda en silencio después. Luego los sonidos de eventos y un `.wav` propio ([SPEAKER.es.md](SPEAKER.es.md)) |
 | Modo DSU | Siguiendo [la guía de Dolphin](guides/dolphin.es.md): B + → cambia a DSU y el Wii Remote emulado de Dolphin recibe botones, Nunchuk, acelerómetro y giroscopio; en el modo 1 el dispositivo DSU sigue conectado pero sin entradas. Igual con Cemu ([guía](guides/cemu.es.md)), con "Use motion" |
 | Modos Xbox | B + flechas cambia de modo con N vibraciones; la plantilla de juego maneja un mando Xbox virtual (panel "Dispositivos de juego" de Windows o un juego); la vibración de los juegos llega al Wiimote |
 | Sacudidas / stick IR | El sentido de las sacudidas del Wiimote y del Nunchuk y el vertical del stick derecho por IR coinciden con el movimiento |

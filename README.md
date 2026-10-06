@@ -260,7 +260,7 @@ becomes DSU automatically. The game template:
 | Left stick | Nunchuk stick |
 | LB / LT | C / Z |
 | RB / RT | A / B |
-| Right stick | MotionPlus rotation (or the IR pointer) |
+| Right stick | MotionPlus aim: holds where the remote points (or the IR pointer) |
 | X / Y / A / B | − / + / 1 / 2 |
 | Start / Back | Home / C and Z together (then LB/LT are not sent) |
 | D-pad | D-pad |
@@ -273,15 +273,39 @@ of up to three of them held together — buttons and/or shakes, e.g. A + shake u
 combination does not also send its separate buttons, and longer combinations win over
 overlapping shorter ones. Shake sensitivity is set per axis for the Wiimote and the
 Nunchuk (the Nunchuk accelerometer is uncalibrated), with a live test in the tab that
-shows which axis fired and how hard. The right stick follows the gyro or the IR
-pointer, with separate horizontal/vertical gyro sensitivity, IR range and dead zone; the
-Nunchuk has no gyroscope. Games' rumble is forwarded to the
+shows which axis fired and how hard.
+
+The right stick can use one of three motion sources:
+
+- **MotionPlus aim** (default): the stick follows the remote's orientation and stays
+  where you point it.
+  - Horizontal: the turn from where the remote pointed when the mode was activated or at
+    the last quick calibration. With the sensor-bar heading correction, the bar itself
+    is the centre.
+  - Vertical: the tilt against gravity, so it doesn't drift.
+  - Sensitivity: the degrees needed for a full deflection, set separately for each axis.
+- **MotionPlus speed:** the rotation speed, like a mouse. The stick springs back to the
+  centre when the turn stops.
+- **IR pointer.**
+
+All three share the IR range and the dead zone. The Nunchuk has no gyroscope. Configs
+from before this version that used the speed source switch to aim automatically. Games' rumble is forwarded to the
 Wiimote. The configuration is stored under `"gamepad"` in `config.local.json`.
 
 Requires the **ViGEmBus** driver (installed with DS4Windows/BthPS3, or by `vgamepad`'s
 bundled installer). ViGEmBus is no longer maintained by its author but works on
 Windows 11. Not yet verified on hardware: the
 vertical direction of the IR right stick.
+
+## Speaker (optional)
+
+Short sounds on the remote's speaker: when a remote connects, when the mode changes, on
+low battery, or on demand (the **Sound** button on each card, or
+`wiichinahook sound --slot 0 --sound chime|file.wav`). Off by default. Built-in sounds or
+your own `.wav` files are set in *Settings → Speaker*. Telephone-like quality, and not
+yet verified on the clone. Game audio from Dolphin does not reach the speaker: DSU has
+no audio channel. [docs/SPEAKER.md](docs/SPEAKER.md) explains the options for
+integrating it with Dolphin.
 
 ## Configuration
 
@@ -354,7 +378,7 @@ certification. See [docs/VALIDATION.md](docs/VALIDATION.md) for physical checks.
 
 ## Limitations of this version
 
-No speaker or accessories other than the Nunchuk. Basic
+No accessories other than the Nunchuk; the speaker only plays short custom sounds (no game audio). Basic
 four-point IR only (no camera image). The orientation heading drifts (no magnetometer)
 and the clone's nominal MotionPlus scale is too high (~1.3–1.85×) until the scale
 calibration is run on each axis. Clone quirks are added when reproduced, not through PIN

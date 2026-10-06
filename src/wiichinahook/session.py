@@ -30,6 +30,9 @@ class WiimoteSession:
         self.pending = None
         self.rumbling = False
         self.rumble_task = None
+        self.sound_task = None
+        self.speaker_volume = None   # set while the speaker is configured (speaker.py)
+        self.speaker_off = None      # idle switch-off timer
         self.tasks = set()
         self.want_ir, self.want_motionplus = ir, motionplus
         # False behind a DolphinBar: it drops the clone's memory-read replies.
@@ -123,8 +126,9 @@ class WiimoteSession:
                                   response=0x21, address=address & 0xFFFF, size=size)
 
     async def write(self, address, data):
-        # Only peripheral registers are writable. Never write EEPROM/Mii data.
-        if address >> 16 not in (0x04A4, 0x04A6, 0x04B0) or not 1 <= len(data) <= 16:
+        # Only peripheral registers (speaker, extensions, IR camera) are writable.
+        # Never write EEPROM/Mii data.
+        if address >> 16 not in (0x04A2, 0x04A4, 0x04A6, 0x04B0) or not 1 <= len(data) <= 16:
             raise ValueError("Only 1..16-byte peripheral register writes are allowed")
         await self.command(0x16, address.to_bytes(4, "big") + bytes([len(data)]) + data.ljust(16, b"\0"))
 
@@ -500,6 +504,23 @@ class WiimoteSession:
                     self.send(0x10)
         self.rumble_task = self.spawn(stop()) if duration_ms else None
 
+    async def play_sound(self, adpcm, volume):
+        """Play encoded audio on the speaker (speaker.py). A new sound cuts the current
+        one; returns False if this one was cut short."""
+        from .speaker import play
+        if self.sound_task:
+            self.sound_task.cancel()
+            await asyncio.wait({self.sound_task})
+        task = self.sound_task = self.spawn(play(self, adpcm, volume))
+        await asyncio.wait({task})   # never propagate a cancellation into the caller
+        if self.sound_task is task:
+            self.sound_task = None
+        if task.cancelled():
+            return False
+        if task.exception():
+            raise task.exception()
+        return True
+
     async def calibrate(self):
         if not self.state.capabilities["motionplus"]:
             raise ValueError("No MotionPlus detected; accelerometer uses factory calibration")
@@ -556,6 +577,8 @@ class WiimoteSession:
             return
         self.initialized = False
         self.rumbling = False
+        if self.speaker_off:
+            self.speaker_off.cancel()
         with contextlib.suppress(Exception):
             self.send(0x10)
         self.closed = True

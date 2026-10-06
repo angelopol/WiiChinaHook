@@ -154,7 +154,8 @@ class GamepadTab:
                 rows.append(ft.Row([ft.Text(t("gp_left_stick" if target == "LEFT_STICK" else "gp_right_stick"),
                                             width=110), dropdown]))
             self.numbers = {key: ft.TextField(label=t(f"gp_{key}"), value=str(template[key]), width=200, dense=True)
-                            for key in ("gyro_full_dps", "gyro_full_dps_y", "ir_range", "deadzone")}
+                            for key in ("angle_full_deg", "angle_full_deg_y", "gyro_full_dps", "gyro_full_dps_y",
+                                        "ir_range", "deadzone")}
             self.shake_fields = {
                 device: [ft.TextField(label=f"{t('gp_shake_' + device)} {t('gp_axis_' + axis)}",
                                       value=str(template["shake_" + device][i]), width=210, dense=True)

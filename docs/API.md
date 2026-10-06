@@ -35,7 +35,7 @@ direction; the older `*_shake_left/right/up/down/forward/back` are still accepte
 to three of them joined with `+` (buttons and/or shakes); per-template `shake_wm` and
 `shake_nc` give the per-axis thresholds in g and `gyro_full_dps`/`gyro_full_dps_y` the
 horizontal/vertical gyro sensitivity. The status `shakes` (`seq`, last events per slot
-with `device`, `axis`, `g`) is meant for tuning; sticks `nc_stick`, `gyro`, `ir`. After `subscribe`,
+with `device`, `axis`, `g`) is meant for tuning; sticks `nc_stick`, `gyro_angle` (aim, holds; `angle_full_deg`/`angle_full_deg_y` degrees for full deflection), `gyro` (speed, springs back), `ir`. After `subscribe`,
 `{"event":"gamepad","data":...}` arrives whenever the mode or its warnings change, and
 `{"event":"xbox","data":{"slot":0,"active":true,"buttons":["A"],"lt":0,"rt":1,"lx":0,"ly":0,"rx":0,"ry":0}}`
 whenever a slot's virtual controller output changes (`"active": false` when it has none).
@@ -44,6 +44,12 @@ whenever a slot's virtual controller output changes (`"active": false` when it h
 at most N `state`/`xbox` events per second and slot (1–60, default 60), or 0 to pause them
 while `gamepad` events keep arriving; on resume the latest state is sent. The GUI uses 30,
 and 0 while it is hidden in the tray.
+
+`play_sound` (`{"slot": 0, "sound": "chime", "volume": 0.5}`) plays a built-in sound
+(`beep`, `blip`, `chime`, `alert`, `count`) or a `.wav` file path on that remote's
+speaker. It replies when the sound ends with `slot`, `sound` and `seconds`, and a new
+sound cuts the one playing. `speaker_config` (`{"config": {...}}`) replaces the event
+sounds (`enabled`, `volume`, `events`); see [SPEAKER.md](SPEAKER.md).
 
 `slot_options` changes a slot's quick/sensor-bar calibration options live (only the
 given fields; the reply has all of them) and `quick_calibrate` runs the same quick

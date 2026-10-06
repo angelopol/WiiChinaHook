@@ -19,6 +19,8 @@ import copy
 from dataclasses import dataclass, field
 import math
 
+from ..orientation import heading, rotate
+
 BUTTON_SOURCES = {
     "wm_up": 0x0800, "wm_down": 0x0400, "wm_left": 0x0100, "wm_right": 0x0200,
     "wm_a": 0x0008, "wm_b": 0x0004, "wm_minus": 0x0010, "wm_plus": 0x1000,
@@ -32,7 +34,9 @@ DIRECTIONS = ("left", "right", "up", "down", "forward", "back")
 SHAKE_AXES = ("x", "y", "z")
 AXIS_GESTURES = tuple(f"{device}_shake_{axis}" for device in ("wm", "nc") for axis in SHAKE_AXES)
 GESTURE_SOURCES = AXIS_GESTURES + tuple(f"{device}_shake_{d}" for device in ("wm", "nc") for d in DIRECTIONS)
-STICK_SOURCES = ("nc_stick", "gyro", "ir")
+# gyro_angle: the remote's aim (orientation), so the stick holds where it points;
+# gyro: rotation speed, so the stick springs back to centre when the turn stops.
+STICK_SOURCES = ("nc_stick", "gyro_angle", "gyro", "ir")
 
 BUTTON_TARGETS = ("A", "B", "X", "Y", "LB", "RB", "LT", "RT", "BACK", "START", "GUIDE", "L3", "R3",
                   "DPAD_UP", "DPAD_DOWN", "DPAD_LEFT", "DPAD_RIGHT")
@@ -50,7 +54,9 @@ GAME_TEMPLATE = {
         "START": "wm_home", "BACK": "nc_c+nc_z", "GUIDE": None, "L3": None, "R3": None,
         "DPAD_UP": "wm_up", "DPAD_DOWN": "wm_down", "DPAD_LEFT": "wm_left", "DPAD_RIGHT": "wm_right",
     },
-    "sticks": {"LEFT_STICK": "nc_stick", "RIGHT_STICK": "gyro"},
+    "sticks": {"LEFT_STICK": "nc_stick", "RIGHT_STICK": "gyro_angle"},
+    "angle_full_deg": 35.0,    # aim: degrees turned left/right for a full horizontal deflection
+    "angle_full_deg_y": 25.0,  # aim: degrees tilted up/down for a full vertical deflection
     "gyro_full_dps": 200.0,    # turning speed (°/s) for a full horizontal right-stick deflection
     "gyro_full_dps_y": 200.0,  # tilting speed (°/s) for a full vertical deflection
     "ir_range": 0.5,           # fraction of the IR image for a full deflection
@@ -64,7 +70,7 @@ GAME_TEMPLATE = {
 # DSU mode: no virtual Xbox controller; the remotes go to DSU clients (Dolphin, Cemu)
 # with all their features. Other modes keep DSU clients connected but idle.
 DSU_TEMPLATE = {"type": "dsu", "name": "DSU"}
-CONFIG_VERSION = 2
+CONFIG_VERSION = 3
 DEFAULT_CONFIG = {"version": CONFIG_VERSION, "modifier": "wm_b", "mode": 1,
                   "modes": [copy.deepcopy(GAME_TEMPLATE), copy.deepcopy(DSU_TEMPLATE), None, None]}
 
@@ -115,7 +121,8 @@ def validate_template(template: dict) -> dict:
     for target, source in result["sticks"].items():
         if source is not None and source not in STICK_SOURCES:
             raise ValueError(f"Invalid source for {target}: {source}")
-    for key, low, high in (("gyro_full_dps", 20, 2000), ("gyro_full_dps_y", 20, 2000), ("ir_range", 0.05, 1.0),
+    for key, low, high in (("angle_full_deg", 5, 90), ("angle_full_deg_y", 5, 90),
+                           ("gyro_full_dps", 20, 2000), ("gyro_full_dps_y", 20, 2000), ("ir_range", 0.05, 1.0),
                            ("deadzone", 0.0, 0.5)):
         value = float(result[key])
         if not low <= value <= high:
@@ -144,8 +151,17 @@ def validate_config(config: dict | None) -> dict:
     modes = list(config.get("modes", []))[:4]
     modes += [None] * (4 - len(modes))
     modes = [validate_template(t) for t in modes]
-    if int(config.get("version", 1)) < 2 and modes[1] is None and "dsu" not in map(mode_type, modes):
+    version = int(config.get("version", 1))
+    if version < 2 and modes[1] is None and "dsu" not in map(mode_type, modes):
         modes[1] = copy.deepcopy(DSU_TEMPLATE)   # mode 2 became the DSU mode
+    if version < 3:
+        # The rate-based "gyro" stick sprang back to centre when the turn stopped; the
+        # aim-based one holds the position, which is what a "gyro stick" was meant to be.
+        for template in modes:
+            if mode_type(template) == "xbox":
+                for target, source in template["sticks"].items():
+                    if source == "gyro":
+                        template["sticks"][target] = "gyro_angle"
     return {"version": CONFIG_VERSION, "modifier": modifier, "mode": mode, "modes": modes}
 
 
@@ -154,7 +170,7 @@ def required_capability(source):
         return None
     if source.startswith("nc_"):
         return "nunchuk"
-    if source == "gyro":
+    if source in ("gyro", "gyro_angle"):
         return "motionplus"
     if source == "ir":
         return "ir"
@@ -256,6 +272,8 @@ class MappingEngine:
         self.wm_shake = ShakeDetector()
         self.nc_shake = ShakeDetector()
         self._compiled_for, self._compiled = None, None
+        self.aim_reference = None      # heading that counts as "centre" for gyro_angle
+        self.aim_key = None
 
     def take_fired(self):
         """Shakes detected since the last call: [(device, axis, g)] for the live test."""
@@ -334,9 +352,32 @@ class MappingEngine:
             self._compiled_for = template
         return self._compiled
 
-    @staticmethod
-    def stick(source, state, template):
+    def aim(self, state, template):
+        """Stick from the remote's orientation: horizontal = heading relative to a
+        reference, vertical = tip elevation against gravity (no drift). The reference is
+        taken when the mode (template) becomes active and again at every quick
+        calibration; with the sensor-bar heading correction it is the bar itself."""
+        q = state.get("orientation")
+        if not q:
+            return 0.0, 0.0
+        tip = rotate(q, (0.0, 1.0, 0.0))
+        calibration = state.get("calibration") or {}
+        key = (id(template), calibration.get("recenter_seq"))
+        if calibration.get("heading") == "ir":
+            self.aim_reference, self.aim_key = 0.0, key
+        elif key != self.aim_key or self.aim_reference is None:
+            self.aim_reference, self.aim_key = heading(tip), key
+        turn = math.atan2(math.sin(heading(tip) - self.aim_reference), math.cos(heading(tip) - self.aim_reference))
+        elevation = math.asin(max(-1.0, min(1.0, tip[2])))
+        # heading() grows counter-clockwise: turning right is negative -> stick right.
+        x = -math.degrees(turn) / template["angle_full_deg"]
+        y = math.degrees(elevation) / template["angle_full_deg_y"]
+        return _deadzone(max(-1.0, min(1.0, x)), max(-1.0, min(1.0, y)), template["deadzone"])
+
+    def stick(self, source, state, template):
         zone = template["deadzone"]
+        if source == "gyro_angle":
+            return self.aim(state, template)
         if source == "nc_stick":
             stick = (state.get("nunchuk") or {}).get("stick")
             return _deadzone(stick[0], stick[1], zone) if stick else (0.0, 0.0)

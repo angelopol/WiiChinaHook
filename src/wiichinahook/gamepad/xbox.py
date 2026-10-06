@@ -70,10 +70,11 @@ class GamepadHub:
     (plus a long one if its active template uses inputs it does not have)."""
 
     def __init__(self, config=None, rumble=None, on_change=None, pad_factory=XboxPad, loop=None, blink=None,
-                 on_output=None):
+                 on_output=None, sound=None):
         self.config = validate_config(config if config is not None else DEFAULT_CONFIG)
         self.rumble = rumble              # async rumble(slot, duration_ms) or None
         self.blink = blink                # async blink(slot, led_mask): flash the mode's LED
+        self.sound = sound                # sound(slot, mode): optional speaker cue
         self.on_output = on_output        # called with each slot's Xbox output when it changes
         self.outputs = {}
         self.on_change = on_change        # called with status() after any change
@@ -142,7 +143,8 @@ class GamepadHub:
             self.changed()
         engine = self.engines.setdefault(slot, MappingEngine())
         snapshot = {"buttons": state.buttons, "timestamp_us": state.timestamp_us, "accel_g": state.accel_g,
-                    "gyro_dps": state.gyro_dps, "ir": state.ir, "nunchuk": state.nunchuk}
+                    "gyro_dps": state.gyro_dps, "ir": state.ir, "nunchuk": state.nunchuk,
+                    "orientation": state.orientation, "calibration": state.calibration}
         template = self.template
         output, request = engine.process(snapshot, template, self.config["modifier"])
         fired = engine.take_fired()
@@ -242,6 +244,8 @@ class GamepadHub:
         remote lacks inputs the mode uses."""
         if self.blink is not None:
             self.spawn(self.blink(slot, 0x10 << (mode - 1)))
+        if self.sound is not None:
+            self.sound(slot, mode)
         if self.rumble is None:
             return
         try:

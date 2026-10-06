@@ -266,7 +266,7 @@ pasa a DSU automáticamente. La plantilla de juego:
 | Stick izquierdo | Stick del Nunchuk |
 | LB / LT | C / Z |
 | RB / RT | A / B |
-| Stick derecho | Giro del MotionPlus (o el puntero IR) |
+| Stick derecho | Apuntado del MotionPlus: se mantiene donde apunta el mando (o el puntero IR) |
 | X / Y / A / B | − / + / 1 / 2 |
 | Start / Back | Home / C y Z juntos (entonces no se envían LB/LT) |
 | Cruceta | Cruceta |
@@ -279,14 +279,39 @@ hasta tres de ellos a la vez: botones y/o sacudidas, p. ej. A + agitar arriba/ab
 combinación no envía también sus botones por separado, y las más largas tienen prioridad
 sobre las más cortas que se solapan. La sensibilidad de las sacudidas se ajusta por eje
 para el Wiimote y el Nunchuk (el acelerómetro del Nunchuk no está calibrado), con una
-prueba en vivo en la pestaña que muestra qué eje se disparó y con qué fuerza. El stick
-derecho sigue al giroscopio o al puntero IR, con sensibilidad horizontal y vertical del
-giroscopio por separado, rango IR y zona muerta; el Nunchuk no tiene giroscopio. La vibración de los juegos llega al Wiimote. La configuración se guarda en
+prueba en vivo en la pestaña que muestra qué eje se disparó y con qué fuerza. 
+
+El stick derecho puede usar una de tres fuentes de movimiento:
+
+- **Apuntado del MotionPlus** (por defecto): el stick sigue la orientación del mando y se
+  queda donde lo apuntas.
+  - Horizontal: el giro respecto a donde apuntaba el mando al activar el modo o en la
+    última calibración rápida. Con la corrección de dirección por la barra sensora, el
+    centro es la propia barra.
+  - Vertical: la inclinación respecto a la gravedad, así que no deriva.
+  - Sensibilidad: los grados necesarios para llegar al máximo, por separado en cada eje.
+- **Velocidad del MotionPlus:** la velocidad de giro, como un ratón. El stick vuelve al
+  centro cuando paras de girar.
+- **Puntero IR.**
+
+Las tres comparten el rango IR y la zona muerta. El Nunchuk no tiene giroscopio. Las
+configuraciones anteriores a esta versión que usaban la velocidad pasan a apuntado
+automáticamente. La vibración de los juegos llega al Wiimote. La configuración se guarda en
 `"gamepad"` dentro de `config.local.json`.
 
 Requiere el controlador **ViGEmBus** (lo instalan DS4Windows/BthPS3 o el instalador que
 incluye `vgamepad`). Su autor ya no lo mantiene, pero funciona en Windows 11. Aún sin
 verificar con hardware: el sentido vertical del stick derecho por IR.
+
+## Altavoz (opcional)
+
+Sonidos cortos en el altavoz del mando: al conectarse un mando, al cambiar de modo, con
+batería baja o a petición (el botón **Sonido** de cada tarjeta, o
+`wiichinahook sound --slot 0 --sound chime|archivo.wav`). Desactivado por defecto. Los
+sonidos integrados o tus propios `.wav` se eligen en *Ajustes → Altavoz*. Calidad tipo
+teléfono, y aún sin comprobar en el clon. El audio de los juegos de Dolphin no llega al
+altavoz: DSU no tiene canal de audio. [docs/SPEAKER.es.md](docs/SPEAKER.es.md) explica
+las opciones para integrarlo con Dolphin.
 
 ## Configuración
 
@@ -361,7 +386,7 @@ comprobaciones físicas.
 
 ## Límites de esta versión
 
-Sin altavoz ni accesorios distintos del Nunchuk. Solo IR
+Sin accesorios distintos del Nunchuk; el altavoz solo reproduce sonidos cortos propios (no el audio de los juegos). Solo IR
 básico de cuatro puntos (sin imagen de cámara). La dirección de la orientación deriva
 (no hay magnetómetro) y la escala nominal del MotionPlus del clon es demasiado alta
 (~1,3–1,85×) hasta que se hace la calibración de escala de cada eje. Las peculiaridades

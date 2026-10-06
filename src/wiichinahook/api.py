@@ -135,6 +135,13 @@ class ApiServer:
             if command == "gamepad_config":
                 return hub.set_config(args.get("config"))
             return hub.status()
+        if command in ("play_sound", "speaker_config"):
+            speaker = getattr(self.manager, "speaker", None)
+            if speaker is None:
+                raise RuntimeError("The speaker is not available in this service")
+            if command == "speaker_config":
+                return speaker.set_config(args.get("config"))
+            return await speaker.play(args.get("slot", 0), args.get("sound", "chime"), args.get("volume"))
         if command == "pair":
             return await self.manager.pair(args.get("seconds", 20), args.get("mode", "sync"), args.get("address"))
         slot = args.get("slot", 0)

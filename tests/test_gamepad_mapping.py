@@ -38,12 +38,54 @@ def test_nunchuk_stick_is_left_stick_with_deadzone():
     assert out.lx == pytest.approx(1.0) and out.ly == 0.0
 
 
-def test_gyro_right_stick_directions():
+def test_gyro_speed_right_stick_directions():
+    template = validate_template(dict(GAME_TEMPLATE, sticks={"LEFT_STICK": "nc_stick", "RIGHT_STICK": "gyro"}))
     engine = MappingEngine()
-    out, _ = engine.process(state(gyro=(-200.0, 0.0, 0.0)), TEMPLATE)   # turning right
+    out, _ = engine.process(state(gyro=(-200.0, 0.0, 0.0)), template)   # turning right
     assert out.rx == pytest.approx(1.0)
-    out, _ = engine.process(state(gyro=(0.0, 0.0, -100.0)), TEMPLATE)   # tip going up
+    out, _ = engine.process(state(gyro=(0.0, 0.0, -100.0)), template)   # tip going up
     assert out.ry > 0.4 and out.rx == 0.0
+    out, _ = engine.process(state(gyro=(0.0, 0.0, 0.0)), template)      # turn stopped: back to centre
+    assert (out.rx, out.ry) == (0.0, 0.0)
+
+
+def aimed(right_deg=0.0, up_deg=0.0):
+    """Body->world quaternion: turned right by right_deg, tip raised by up_deg."""
+    import math
+    from wiichinahook.orientation import from_axis_angle, multiply
+    return list(multiply(from_axis_angle((0.0, 0.0, 1.0), math.radians(-right_deg)),
+                         from_axis_angle((1.0, 0.0, 0.0), math.radians(up_deg))))
+
+
+def aim_state(q, recenter=None, heading=None):
+    s = state()
+    s["orientation"] = q
+    s["calibration"] = {k: v for k, v in (("recenter_seq", recenter), ("heading", heading)) if v is not None}
+    return s
+
+
+def test_gyro_aim_stick_holds_where_the_remote_points():
+    engine = MappingEngine()
+    out, _ = engine.process(aim_state(aimed(30.0)), TEMPLATE)          # where it points on activation = centre
+    assert (out.rx, out.ry) == (0.0, 0.0)
+    for _ in range(3):                                                  # turned 35° right and kept there
+        out, _ = engine.process(aim_state(aimed(65.0)), TEMPLATE)
+        assert out.rx == pytest.approx(1.0) and out.ry == pytest.approx(0.0, abs=1e-9)
+    out, _ = engine.process(aim_state(aimed(30.0, up_deg=25.0)), TEMPLATE)   # tip raised 25°: full up
+    assert out.ry == pytest.approx(1.0) and out.rx == pytest.approx(0.0, abs=1e-6)
+    out, _ = engine.process(aim_state(aimed(10.0)), TEMPLATE)          # turned left of centre
+    assert out.rx < -0.3
+    out, _ = engine.process(aim_state(aimed(10.0), recenter=1), TEMPLATE)   # quick calibration recentres
+    assert (out.rx, out.ry) == (0.0, 0.0)
+    out, _ = engine.process(aim_state(aimed(-35.0), heading="ir"), TEMPLATE)  # sensor bar = centre
+    assert out.rx == pytest.approx(-1.0)
+
+
+def test_old_gyro_sticks_migrate_to_aim():
+    old = validate_config({"version": 2, "modes": [{"sticks": {"RIGHT_STICK": "gyro"}}, None, None, None]})
+    assert old["modes"][0]["sticks"]["RIGHT_STICK"] == "gyro_angle"
+    kept = validate_config({"version": 3, "modes": [{"sticks": {"RIGHT_STICK": "gyro"}}, None, None, None]})
+    assert kept["modes"][0]["sticks"]["RIGHT_STICK"] == "gyro"
 
 
 def test_modifier_plus_arrows_switch_mode_clockwise_and_swallow_the_arrow():
