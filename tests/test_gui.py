@@ -377,3 +377,14 @@ def test_key_capture_asks_windows_for_alt(monkeypatch):
     assert field.value == "ctrl+alt+p"
     capture.stop(field)
 
+
+
+def test_credits_link_to_the_repo_and_portfolio():
+    pytest.importorskip("flet")
+    from wiichinahook.gui.app import Controller
+    controller = object.__new__(Controller)
+    controller.t = Translator("es")
+    card = controller.build_credits()
+    controls = card.content.controls
+    links = [c for row in controls if hasattr(row, "controls") for c in row.controls if getattr(c, "url", None)]
+    assert {link.url for link in links} == {"https://github.com/angelopol/WiiChinaHook", "https://angelopol.com"}

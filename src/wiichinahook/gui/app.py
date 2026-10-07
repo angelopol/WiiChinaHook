@@ -38,6 +38,8 @@ TAB_CONTROLLERS, TAB_SETTINGS, TAB_GAMEPAD, TAB_LOG = range(4)
 STREAM_HZ = 2 * REFRESH_HZ  # live events requested while the window is visible
 ASSETS = Path(__file__).parent / "assets"
 # App behaviour preferences (gui.json) and their defaults.
+REPO_URL = "https://github.com/angelopol/WiiChinaHook"
+PORTFOLIO_URL = "https://angelopol.com"
 APP_PREFS = {"start_minimized": False, "close_to_tray": True, "start_service": True}
 STATUS_COLORS = {"stopped": ft.Colors.GREY, "starting": ft.Colors.AMBER, "running": ft.Colors.GREEN,
                  "attached": ft.Colors.BLUE, "error": ft.Colors.RED}
@@ -565,7 +567,16 @@ class Controller:
                        hint(t("settings_save_hint"))], wrap=True, vertical_alignment=ft.CrossAxisAlignment.CENTER)
         return ft.Column(scroll=ft.ScrollMode.AUTO, expand=True, controls=[
             columns([connection, network, sensors, save],
-                    [self.build_app_settings(), self.build_speaker_settings()])])
+                    [self.build_app_settings(), self.build_speaker_settings(), self.build_credits()])])
+
+    def build_credits(self):
+        t = self.t
+        link = lambda icon, text, url: ft.TextButton(text, icon=icon, url=url, tooltip=url)
+        return section(t("credits_title"), ft.Icons.FAVORITE_OUTLINE, [
+            ft.Text(t("credits_body", version=__version__), size=13),
+            ft.Row([link(ft.Icons.CODE, t("credits_repo"), REPO_URL),
+                    link(ft.Icons.PERSON_OUTLINE, t("credits_portfolio"), PORTFOLIO_URL)], wrap=True),
+            hint(t("credits_license"))])
 
     def build_app_settings(self):
         """Windows integration: autostart, tray and service start (saved at once)."""

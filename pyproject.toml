@@ -1,6 +1,6 @@
 [project]
 name = "wiichinahook"
-version = "0.4.0"
+version = "0.4.1"
 description = "Wiimote clones on Windows (DolphinBar or Bluetooth passthrough) for Dolphin, Cemu (DSU) and Xbox games."
 readme = "README.md"
 license = "MIT"
