@@ -35,7 +35,7 @@ wiichinahook = "wiichinahook.cli:main"
 wiichinahook-gui = "wiichinahook.gui.app:main"  # no console window
 
 [project.optional-dependencies]
-test = ["pytest==9.1.1", "pytest-asyncio==1.4.0"]
+test = ["pytest==9.1.1", "pytest-asyncio==1.4.0", "setuptools>=77"]  # setuptools: test_version validates pyproject
 gui = ["flet==1.0.3", "flet-desktop==1.0.3", "pystray==0.19.5", "pillow==12.3.0"]  # pystray/Pillow: tray icon
 dev = ["pillow==12.3.0"]  # tools/make_calibration_gifs.py, tools/make_icon.py
 release = ["flet-cli==1.0.3", "pyinstaller==6.22.3"]  # tools/build_release.ps1
