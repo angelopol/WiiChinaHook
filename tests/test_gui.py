@@ -289,14 +289,31 @@ def test_pc_editor_super_shortcuts_round_trip():
     tab.editing = 3
     tab.build()
     editor = tab.pc_editor
-    assert editor.shortcuts_enabled.value is False and len(editor.shortcut_rows) == 8
+    assert editor.shortcuts_enabled.value is False and len(editor.shortcut_rows) == 32
+    assert editor.shortcut_body.visible is False                    # closed while off
+    editor.toggle_shortcuts()
+    assert editor.shortcut_body.visible is True
+    visible = [i for i, r in enumerate(editor.shortcut_rows) if r.row.visible]
+    assert visible == list(range(8)) and editor.page_label.value == "Página 1 de 4 · 0 configurados"
+    editor.turn_page(1)
+    assert [i for i, r in enumerate(editor.shortcut_rows) if r.row.visible] == list(range(8, 16))
+    editor.turn_page(5)
+    assert editor.shortcut_page == 3 and editor.page_next.disabled    # stops at the last page
+    editor.turn_page(-9)
+    assert editor.shortcut_page == 0 and editor.page_prev.disabled
+    last = editor.shortcut_rows[31]                                  # the 32nd slot works too
+    last.inputs[0].value, last.inputs[1].value = "nc_c", "nc_z"
+    last.action_row.kind.value, last.action_row.text.value = "keys", "f12"
     row = editor.shortcut_rows[0]
     row.inputs[0].value, row.inputs[1].value = "wm_1", "wm_minus"
     row.action_row.kind.value, row.action_row.text.value = "keys", "ctrl+add+oemcomma"
     editor.shortcuts_enabled.value = True
     result = validate_template(tab.collect())
     assert result["shortcuts_enabled"] is True
-    assert result["shortcuts"] == [{"inputs": ["wm_1", "wm_minus"], "action": "keys:ctrl+add+oemcomma"}]
+    assert result["shortcuts"] == [{"inputs": ["wm_1", "wm_minus"], "action": "keys:ctrl+add+oemcomma"},
+                                   {"inputs": ["nc_c", "nc_z"], "action": "keys:f12"}]
+    editor.show_shortcut_page()
+    assert editor.page_label.value.endswith("2 configurados")
 
 
 def test_flet_key_names_map_to_our_keys():

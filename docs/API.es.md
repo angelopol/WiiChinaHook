@@ -32,7 +32,7 @@ plantilla Xbox (`"type": "xbox"`, por defecto) o `{"type": "dsu", "name": "DSU",
 (`"type": "pc"`: `mouse` con `source` `gyro`/`ir`/`nc_stick`/`wm_dpad`/null y sus velocidades,
 `shake_g`, y `buttons` que asigna entradas como `wm_a` o `nc_up` a acciones como
 `"keys:ctrl+9"`, `"mouse:left"`, `"system:mute"`, `"open:notepad"` o
-`"toggle:ctrl+c | ctrl+v"`; `shortcuts_enabled`, `shortcut_window_ms` y `shortcuts`
+`"toggle:ctrl+c | ctrl+v"`; `shortcuts_enabled`, `shortcut_window_ms` y `shortcuts` (hasta 32)
 (`[{"inputs": ["wm_1", "wm_minus"], "action": "keys:ctrl+add+oemcomma"}]`); ver [PC_MODE.es.md](PC_MODE.es.md)), o una plantilla PC Game
 (`"type": "pc_game"`: los mismos campos, pero solo acciones `keys`/`mouse`/`toggle`, sin la fuente
 de ratón `ir`, `recenter_on_calibration` siempre false y `modifier_on_release` false por defecto).

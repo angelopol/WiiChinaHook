@@ -81,7 +81,7 @@ aliases also work (`control`, `escape`, `del`, `pgup`…), in any case.
 
 Two or three inputs held together can run an action of their own, for example **1 + −**
 → `ctrl+add+oemcomma`. They are off by default: turn them on in the editor's *Super
-shortcuts* card (both PC modes), which has up to 8 rows.
+shortcuts* card (both PC modes): up to 32 shortcuts, 8 per page. The card folds away with the arrow in its header.
 
 - Each shortcut's buttons wait the **shortcut window** (50 ms by default, 0–300) for the
   rest.

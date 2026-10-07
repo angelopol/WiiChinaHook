@@ -7,7 +7,7 @@ import sys
 
 import flet as ft
 
-from ..gamepad.pc import (GAME_ACTION_TYPES, GAME_MOUSE_SOURCES, KEYS, MOUSE_ACTIONS, MOUSE_CLAIMS,
+from ..gamepad.pc import (GAME_ACTION_TYPES, GAME_MOUSE_SOURCES, KEYS, MAX_SHORTCUTS, MOUSE_ACTIONS, MOUSE_CLAIMS,
                           MOUSE_SOURCES, PC_SOURCES, PC_TEMPLATE, STICK_DIRECTIONS,
                           SYSTEM_ACTIONS)
 from ..gamepad.mapping import AXIS_GESTURES
@@ -17,7 +17,7 @@ KINDS = ("none", "keys", "mouse", "system", "open", "toggle")
 WIIMOTE = ("wm_a", "wm_b", "wm_1", "wm_2", "wm_minus", "wm_plus", "wm_home",
            "wm_up", "wm_down", "wm_left", "wm_right")
 NUNCHUK = ("nc_c", "nc_z", *STICK_DIRECTIONS)
-SHORTCUT_ROWS = 8
+SHORTCUT_PAGE = 8     # super shortcuts shown per page (MAX_SHORTCUTS in all)
 MOUSE_FIELDS = ("gyro_speed", "gyro_deadzone", "freeze_dps", "stick_speed", "stick_deadzone", "ir_range",
                 "ir_smoothing")
 
@@ -232,14 +232,15 @@ class ActionRow:
 class ShortcutRow:
     """A super shortcut: up to three inputs held together -> one action."""
 
-    def __init__(self, shortcut, t, kinds, label, capture=None):
+    def __init__(self, shortcut, t, kinds, label, capture=None, number=None):
         inputs = list(shortcut["inputs"]) if shortcut else []
         options = [ft.DropdownOption("none", t("gp_none"))] + [ft.DropdownOption(s, label(s)) for s in PC_SOURCES]
         self.inputs = [ft.Dropdown(value=inputs[i] if i < len(inputs) else "none", dense=True, expand=True,
                                    label=None if i == 0 else "+", options=options) for i in range(3)]
         self.action_row = ActionRow("shortcut", "→", shortcut["action"] if shortcut else None, t, kinds,
                                     capture=capture, label_width=24)
-        self.row = ft.Column([ft.Row(self.inputs, spacing=6), self.action_row.row], spacing=4, tight=True)
+        head = [ft.Text(f"{number}.", width=26, weight=ft.FontWeight.W_600)] if number else []
+        self.row = ft.Column([ft.Row([*head, *self.inputs], spacing=6), self.action_row.row], spacing=4, tight=True)
 
     def value(self):
         """{"inputs", "action"}, or None for an empty row (validation reports half-filled ones)."""
@@ -287,8 +288,23 @@ class PcEditor:
         self.shortcuts_enabled = ft.Switch(label=t("pc_shortcuts_enabled"), value=template.get("shortcuts_enabled", False))
         self.shortcut_window = number(t("pc_shortcut_window_ms"), template.get("shortcut_window_ms", 50), width=220)
         self.shortcut_rows = [ShortcutRow(shortcuts[i] if i < len(shortcuts) else None, t, self.kinds, self.label,
-                                          self.capture)
-                              for i in range(max(SHORTCUT_ROWS, len(shortcuts)))]
+                                          self.capture, number=i + 1)
+                              for i in range(MAX_SHORTCUTS)]
+        # Collapsible, paginated: closed unless the shortcuts are in use.
+        self.shortcut_page = 0
+        self.page_label = ft.Text("", size=12, color=ft.Colors.ON_SURFACE_VARIANT)
+        self.page_prev = ft.IconButton(ft.Icons.CHEVRON_LEFT, tooltip=t("pc_shortcuts_prev"),
+                                       on_click=lambda e: self.turn_page(-1, e))
+        self.page_next = ft.IconButton(ft.Icons.CHEVRON_RIGHT, tooltip=t("pc_shortcuts_next"),
+                                       on_click=lambda e: self.turn_page(1, e))
+        self.shortcut_body = ft.Column(spacing=10, tight=True, controls=[
+            ft.Row([self.shortcuts_enabled, self.shortcut_window], wrap=True,
+                   vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            ft.Row([self.page_prev, self.page_label, self.page_next], spacing=4,
+                   vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            *[row.row for row in self.shortcut_rows]], visible=bool(self.shortcuts_enabled.value))
+        self.shortcut_toggle = ft.IconButton(on_click=self.toggle_shortcuts)
+        self.show_shortcut_page()
         self.apply_claims()
         n = self.numbers
         left = [
@@ -301,10 +317,8 @@ class PcEditor:
                 ft.Row([n["stick_speed"], n["stick_deadzone"]]),
                 ft.Row([n["ir_range"], n["ir_smoothing"]], visible=not self.game)],
                 subtitle=t("pc_game_mouse_hint" if self.game else "pc_mouse_hint")),
-            section(t("pc_shortcuts"), ft.Icons.KEYBOARD_COMMAND_KEY, [
-                ft.Row([self.shortcuts_enabled, self.shortcut_window], wrap=True,
-                       vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                *[row.row for row in self.shortcut_rows]], subtitle=t("pc_shortcuts_hint")),
+            section(t("pc_shortcuts"), ft.Icons.KEYBOARD_COMMAND_KEY, [self.shortcut_body],
+                    subtitle=t("pc_shortcuts_hint"), trailing=self.shortcut_toggle),
             section(t("pc_help_title"), ft.Icons.HELP_OUTLINE, [
                 ft.Markdown(t("pc_help"), selectable=True, extension_set=ft.MarkdownExtensionSet.GITHUB_WEB)]),
         ]
@@ -316,6 +330,35 @@ class PcEditor:
                     [ft.Row([self.shake]), *[self.rows[s].row for s in AXIS_GESTURES]]),
         ]
         return [header, columns(left, right)]
+
+    def shortcut_pages(self):
+        return -(-len(self.shortcut_rows) // SHORTCUT_PAGE)
+
+    def show_shortcut_page(self):
+        """Only this page's rows are visible; the label counts the filled rows."""
+        start = self.shortcut_page * SHORTCUT_PAGE
+        for index, row in enumerate(self.shortcut_rows):
+            row.row.visible = start <= index < start + SHORTCUT_PAGE
+        filled = sum(1 for row in self.shortcut_rows if row.value())
+        self.page_label.value = self.t("pc_shortcuts_page", page=self.shortcut_page + 1,
+                                       pages=self.shortcut_pages(), count=filled)
+        self.page_prev.disabled = self.shortcut_page == 0
+        self.page_next.disabled = self.shortcut_page >= self.shortcut_pages() - 1
+        opened = self.shortcut_body.visible
+        self.shortcut_toggle.icon = ft.Icons.EXPAND_LESS if opened else ft.Icons.EXPAND_MORE
+        self.shortcut_toggle.tooltip = self.t("pc_shortcuts_hide" if opened else "pc_shortcuts_show")
+
+    def turn_page(self, step, e=None):
+        self.shortcut_page = max(0, min(self.shortcut_pages() - 1, self.shortcut_page + step))
+        self.show_shortcut_page()
+        if e is not None:
+            e.control.page.update()
+
+    def toggle_shortcuts(self, e=None):
+        self.shortcut_body.visible = not self.shortcut_body.visible
+        self.show_shortcut_page()
+        if e is not None:
+            e.control.page.update()
 
     def apply_claims(self):
         claimed = set(MOUSE_CLAIMS.get(self.source.value, ()))

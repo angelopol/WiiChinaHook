@@ -31,7 +31,7 @@ the default) or `{"type": "dsu", "name": "DSU", "nunchuk_server": true, "ir_serv
 in the config, 0 = not opened), or a PC template (`"type": "pc"`: `mouse` with `source`
 `gyro`/`ir`/`nc_stick`/`wm_dpad`/null and its speeds, `shake_g`, and `buttons` mapping inputs
 such as `wm_a` or `nc_up` to actions like `"keys:ctrl+9"`, `"mouse:left"`, `"system:mute"`,
-`"open:notepad"` or `"toggle:ctrl+c | ctrl+v"`; `shortcuts_enabled`, `shortcut_window_ms` and `shortcuts`
+`"open:notepad"` or `"toggle:ctrl+c | ctrl+v"`; `shortcuts_enabled`, `shortcut_window_ms` and `shortcuts` (up to 32)
 (`[{"inputs": ["wm_1", "wm_minus"], "action": "keys:ctrl+add+oemcomma"}]`); see [PC_MODE.md](PC_MODE.md)), or a PC Game
 template (`"type": "pc_game"`: the same fields, but only `keys`/`mouse`/`toggle` actions, no `ir`
 mouse source, `recenter_on_calibration` always false and `modifier_on_release` false by default).

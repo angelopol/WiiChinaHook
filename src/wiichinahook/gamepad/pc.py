@@ -47,7 +47,7 @@ STICK_THRESHOLD = 0.5          # Nunchuk stick deflection that counts as a direc
 MODIFIER_WINDOW = 0.06         # s the members of a two-button modifier wait for each other
 SCROLL_DELAY, SCROLL_REPEAT = 0.4, 0.08
 SHAKE_SETTLE = 0.3             # s the gyro mouse stays frozen after a Wiimote shake
-MAX_SHORTCUTS = 16
+MAX_SHORTCUTS = 32
 AB_ACTIONS = ("center", "regrip", None)
 AB = ("wm_a", "wm_b")
 

@@ -83,7 +83,7 @@ alias comunes (`control`, `escape`, `del`, `pgup`…), en mayúsculas o minúscu
 
 Dos o tres entradas pulsadas a la vez pueden ejecutar su propia acción, por ejemplo
 **1 + −** → `ctrl+add+oemcomma`. Vienen desactivados: actívalos en la tarjeta
-*Superatajos* del editor (los dos modos PC), que tiene hasta 8 filas.
+*Superatajos* del editor (los dos modos PC): hasta 32 atajos, 8 por página. La tarjeta se pliega con la flecha de su cabecera.
 
 - Los botones de cada atajo esperan el **margen de los atajos** (50 ms por defecto, 0–300)
   al resto.

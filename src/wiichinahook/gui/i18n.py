@@ -268,6 +268,11 @@ TEXT = {
         "pc_freeze_on_shake": "Freeze the gyro mouse when shaking",
         "pc_ab_action": "A + B together",
         "pc_shortcuts": "Super shortcuts",
+        "pc_shortcuts_page": "Page {page} of {pages} · {count} set",
+        "pc_shortcuts_prev": "Previous page",
+        "pc_shortcuts_next": "Next page",
+        "pc_shortcuts_show": "Show the super shortcuts",
+        "pc_shortcuts_hide": "Hide the super shortcuts",
         "pc_shortcuts_enabled": "Use super shortcuts",
         "pc_shortcut_window_ms": "Shortcut window (ms, 0–300)",
         "pc_shortcuts_hint": "Two or three inputs held together run their own action, e.g. 1 + − → "
@@ -653,6 +658,11 @@ TEXT = {
         "pc_freeze_on_shake": "Congelar el ratón del giroscopio al agitar",
         "pc_ab_action": "A + B a la vez",
         "pc_shortcuts": "Superatajos",
+        "pc_shortcuts_page": "Página {page} de {pages} · {count} configurados",
+        "pc_shortcuts_prev": "Página anterior",
+        "pc_shortcuts_next": "Página siguiente",
+        "pc_shortcuts_show": "Mostrar los superatajos",
+        "pc_shortcuts_hide": "Ocultar los superatajos",
         "pc_shortcuts_enabled": "Usar superatajos",
         "pc_shortcut_window_ms": "Margen de los atajos (ms, 0–300)",
         "pc_shortcuts_hint": "Dos o tres entradas a la vez ejecutan su propia acción, p. ej. 1 + − → "
