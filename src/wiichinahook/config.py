@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
+import os
 from pathlib import Path
 import re
 
@@ -135,6 +136,13 @@ def dsu_config(data: dict) -> DsuConfig:
     if len(set(used)) != len(used):
         raise ValueError("The DSU servers need different ports")
     return DsuConfig(data.get("host", "127.0.0.1"), *ports)
+
+
+def default_config_path() -> Path:
+    """Where settings and remote data live unless --config says otherwise:
+    %APPDATA%/WiiChinaHook, shared by the release executable and source runs (the
+    executable may be started by Windows from any folder)."""
+    return Path(os.environ.get("APPDATA", Path.home())) / "WiiChinaHook" / "config.local.json"
 
 
 def load_config(path: str | Path) -> AppConfig:

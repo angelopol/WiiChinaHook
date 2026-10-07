@@ -16,6 +16,7 @@ import flet as ft
 import flet.canvas as cv
 
 from .. import autostart
+from ..config import default_config_path
 from ..config import COMBOS, AppConfig, SlotOptions, load_config, parse_int, save_config
 from ..orientation import from_axis_angle, multiply, reference_yaw
 from ..speaker import BUILTIN as BUILTIN_SOUNDS, EVENTS as SOUND_EVENTS, validate_speaker
@@ -1013,14 +1014,6 @@ class Controller:
                 self.hide_window()         # keep running; exit from the tray menu
             else:
                 await self.quit()
-
-
-def default_config_path() -> Path:
-    """The release executable keeps its settings in %APPDATA%/WiiChinaHook (Windows may
-    start it from any folder); a source checkout uses the working directory."""
-    if getattr(sys, "frozen", False):
-        return Path(os.environ.get("APPDATA", Path.home())) / "WiiChinaHook" / "config.local.json"
-    return Path("config.local.json")
 
 
 def run(config_path=None, minimized=False):

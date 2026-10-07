@@ -8,7 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from .app import run_app
-from .config import AppConfig, DsuConfig, DongleConfig, WiimoteConfig, load_config, parse_int, normalize_address
+from .config import AppConfig, default_config_path, DsuConfig, DongleConfig, WiimoteConfig, load_config, parse_int, normalize_address
 from .raw_hci import (
     describe_usb_device,
     listen_raw_hci,
@@ -34,7 +34,8 @@ def main() -> None:
     usb_find.add_argument("--pid", required=True, help="product id, e.g. 0x0001")
 
     hook = subparsers.add_parser("hook", help="connect Wiimote and serve DSU")
-    hook.add_argument("--config", default="config.local.json", help="path to JSON config")
+    hook.add_argument("--config", default=None,
+                      help="path to JSON config (default: %%APPDATA%%/WiiChinaHook/config.local.json)")
     hook.add_argument("--mode", choices=("dolphinbar", "bluetooth"),
                       help="dolphinbar (default): Mayflash DolphinBar in mode 4; "
                            "bluetooth: Bumble passthrough on the libusbK adapter")
@@ -48,7 +49,8 @@ def main() -> None:
     hook.add_argument("--dsu-mac", help="MAC reported to DSU clients")
 
     gui = subparsers.add_parser("gui", help="open the graphical app (needs the [gui] extra)")
-    gui.add_argument("--config", default="config.local.json", help="path to JSON config")
+    gui.add_argument("--config", default=None,
+                      help="path to JSON config (default: %%APPDATA%%/WiiChinaHook/config.local.json)")
 
     scan = subparsers.add_parser("scan-wiimotes", help="scan Bluetooth Classic devices with Bumble")
     scan.add_argument("--transport", default="usb:8087:0a2a", help="Bumble USB selector")
@@ -321,12 +323,13 @@ def command_usb_hci_pair_window(args: argparse.Namespace) -> None:
 
 
 def config_from_args(args: argparse.Namespace) -> AppConfig:
+    path = args.config or default_config_path()
     try:
-        config = load_config(args.config)
+        config = load_config(path)
     except FileNotFoundError:
-        if args.config != "config.local.json":
+        if args.config is not None:
             raise SystemExit(f"Config not found: {args.config}")
-        config = AppConfig()
+        config = AppConfig(state_dir=path.parent / ".wiichinahook")
     if args.mode:
         config = replace(config, mode=args.mode)
     if args.wiimote and config.mode != "bluetooth":
