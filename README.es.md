@@ -193,6 +193,19 @@ azul: girar, verde: mantener) y los zigzags marcan las vibraciones. Los GIF se g
 con el propio modelo 3D de la app mediante `tools/make_calibration_gifs.py` (requiere el
 extra `[dev]`).
 
+### Antirrebote de botones
+
+Los botones de los clones baratos rebotan, sobre todo el A: una pulsación llega como varios
+pulsos rápidos de pulsar y soltar. **Antirrebote (ms)**, en la tarjeta de cada mando (20 ms
+por defecto, 0–100, 0 = desactivado), lo filtra:
+
+- El primer cambio de un botón pasa al instante, sin añadir latencia.
+- Se ignoran los cambios siguientes de ese botón dentro del margen.
+- Un cambio real que se mantiene más allá del margen se toma en el siguiente reporte.
+
+Cubre todos los botones más C y Z del Nunchuk, antes de que nada los lea: Xbox, DSU, PC,
+combinaciones y la GUI.
+
 ### Filtro de ruido del giroscopio
 
 El giroscopio de algunos mandos vibra en reposo (lecturas de ±1–2 °/s con el mando
@@ -351,12 +364,14 @@ Requiere el controlador **ViGEmBus** (lo instalan DS4Windows/BthPS3 o el instala
 incluye `vgamepad`). Su autor ya no lo mantiene, pero funciona en Windows 11. Aún sin
 verificar con hardware: el sentido vertical del stick derecho por IR.
 
-## Modo PC (ratón y teclado)
+## Modos PC y PC Game (ratón y teclado)
 
-Modo 3 por defecto (B + ↓): los mandos manejan el propio Windows, sin mando virtual.
+Dos modos manejan el propio Windows, sin mando virtual.
+
+**PC (modo 3 por defecto, B + ↓)**, para el escritorio:
 
 - **Ratón:** lo mueve el giroscopio, el puntero IR, el stick del Nunchuk o la cruceta. Lo
-  que lo mueve no se puede mapear también.
+  que lo mueve no se puede mapear también. **A + B** a la vez recentran el puntero.
 - **Acciones:** cada botón, las cuatro direcciones del stick del Nunchuk y las sacudidas
   pueden enviar:
   - teclas y atajos, con cualquier número de teclas (`ctrl+9`, `ctrl+shift+esc`);
@@ -364,6 +379,24 @@ Modo 3 por defecto (B + ↓): los mandos manejan el propio Windows, sin mando vi
   - teclas del sistema (silenciar, volumen, multimedia, menú Inicio);
   - abrir un programa o página web;
   - una acción **alternar** que recorre varias acciones.
+- **Superatajos** (desactivados por defecto): 2–3 entradas a la vez ejecutan su propia acción,
+  p. ej. 1 + − → `ctrl+add+oemcomma`.
+
+**PC Game (modo 4 por defecto, B + ←)**, el mismo teclado y ratón pero solo para juegos:
+
+- **Acciones:** solo teclas, botones del ratón y alternar. Sin teclas del sistema ni
+  lanzadores.
+- **Ratón:** siempre relativo (giroscopio, stick del Nunchuk o cruceta), para que funcionen
+  la cámara y la puntería. El puntero nunca se lleva al centro; mantener **A + B** pausa la
+  mira del giroscopio para volver a apuntar el mando.
+- **Modificador:** actúa al momento y se mantiene, así B puede ser el gatillo.
+- **Distribución por defecto:** tipo shooter:
+  - Stick del Nunchuk = WASD
+  - B = disparar, Z = apuntar, C = saltar, A = usar
+  - 1 = agacharse, 2 = correr (mantenido); agitar el Nunchuk = correr
+  - Cruceta = R / Q / F / G
+  - Home = Esc
+  - Agitar el Wiimote = cuerpo a cuerpo
 
 Detalles y nombres de teclas: [docs/PC_MODE.es.md](docs/PC_MODE.es.md).
 

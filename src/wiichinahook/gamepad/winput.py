@@ -44,6 +44,22 @@ class INPUT(ctypes.Structure):
     _fields_ = [("type", wintypes.DWORD), ("u", _INPUTUNION)]
 
 
+class POINT(ctypes.Structure):
+    _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
+
+
+class MONITORINFO(ctypes.Structure):
+    _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT), ("rcWork", wintypes.RECT),
+                ("dwFlags", wintypes.DWORD)]
+
+
+MONITOR_DEFAULTTONEAREST = 2
+
+
+def rect_center(left, top, right, bottom):
+    return (left + right) // 2, (top + bottom) // 2
+
+
 class WindowsInput:
     def __init__(self):
         if sys.platform != "win32":
@@ -53,6 +69,11 @@ class WindowsInput:
         self.user32.SendInput.restype = wintypes.UINT
         self.user32.MapVirtualKeyW.argtypes = (wintypes.UINT, wintypes.UINT)
         self.user32.MapVirtualKeyW.restype = wintypes.UINT
+        self.user32.GetCursorPos.argtypes = (ctypes.POINTER(POINT),)
+        self.user32.MonitorFromPoint.argtypes = (POINT, wintypes.DWORD)
+        self.user32.MonitorFromPoint.restype = wintypes.HMONITOR
+        self.user32.GetMonitorInfoW.argtypes = (wintypes.HMONITOR, ctypes.POINTER(MONITORINFO))
+        self.user32.SetCursorPos.argtypes = (ctypes.c_int, ctypes.c_int)
 
     def _send(self, *inputs):
         array = (INPUT * len(inputs))(*inputs)
@@ -87,6 +108,26 @@ class WindowsInput:
         x, y = round(max(0.0, min(1.0, u)) * 65535), round(max(0.0, min(1.0, v)) * 65535)
         self._send(INPUT(INPUT_MOUSE, _INPUTUNION(mi=MOUSEINPUT(x, y, 0, MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE,
                                                                   0, 0))))
+
+    def current_monitor(self):
+        """(left, top, right, bottom) of the monitor the cursor is on, in desktop pixels."""
+        point = POINT()
+        self.user32.GetCursorPos(ctypes.byref(point))
+        monitor = self.user32.MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST)
+        info = MONITORINFO(cbSize=ctypes.sizeof(MONITORINFO))
+        if not monitor or not self.user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+            return None
+        r = info.rcMonitor
+        return r.left, r.top, r.right, r.bottom
+
+    def center(self):
+        """Pointer to the centre of the monitor it is on (multi-monitor aware; the
+        absolute SendInput coordinates would always mean the primary monitor)."""
+        rect = self.current_monitor()
+        if rect is None:
+            self.move_abs(0.5, 0.5)
+            return
+        self.user32.SetCursorPos(*rect_center(*rect))
 
     def launch(self, target):
         try:

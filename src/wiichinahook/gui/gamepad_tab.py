@@ -13,7 +13,7 @@ from ..gamepad.mapping import (AXIS_GESTURES, BUTTON_SOURCES, BUTTON_TARGETS, DS
 from . import xbox_view
 from .widgets import columns, hint, number, section
 from .pc_editor import PcEditor
-from ..gamepad.pc import PC_TEMPLATE
+from ..gamepad.pc import PC_GAME_TEMPLATE, PC_TEMPLATE, PC_TYPES
 
 NONE = "none"  # dropdown key for "unassigned"
 TARGET_LABELS = {"DPAD_UP": "D-pad ↑", "DPAD_DOWN": "D-pad ↓", "DPAD_LEFT": "D-pad ←", "DPAD_RIGHT": "D-pad →",
@@ -31,7 +31,7 @@ DSU_BUTTONS = [("Wiimote A", "Circle"), ("Wiimote B", "Triangle"), ("Wiimote 1",
 GUIDES = {"dolphin": "Dolphin", "cemu": "Cemu"}
 # The release executable bundles docs/guides as gui/guides; a checkout reads the repo's.
 GUIDE_DIRS = (Path(__file__).resolve().parent / "guides", Path(__file__).resolve().parents[3] / "docs" / "guides")
-MODE_TYPES = ("empty", "xbox", "dsu", "pc")
+MODE_TYPES = ("empty", "xbox", "dsu", "pc", "pc_game")
 NUMBER_FIELDS = ("chord_window_ms", "deadzone", "angle_full_deg", "angle_full_deg_y", "gyro_deadzone", "gyro_full_dps",
                  "gyro_full_dps_y", "ir_range")
 
@@ -156,15 +156,15 @@ class GamepadTab:
         t = self.t
         template = self.config["modes"][self.editing - 1]
         kind = mode_type(template) or "empty"
-        self.mode_type = ft.Dropdown(label=t("gp_type"), value=kind, width=240, dense=True,
+        self.mode_type = ft.Dropdown(label=t("gp_type"), value=kind, width=330, dense=True,
                                      options=[ft.DropdownOption(k, t(f"gp_type_{k}")) for k in MODE_TYPES],
                                      on_select=self.on_type)
         if kind == "dsu":
             self.editor.controls = self.dsu_panel(template)
             return
-        if kind == "pc":
+        if kind in PC_TYPES:
             self.name = ft.TextField(label=t("gp_name"), value=template["name"], width=220, dense=True)
-            self.pc_editor = PcEditor(t, source_label)
+            self.pc_editor = PcEditor(t, source_label, game=kind == "pc_game")
             header = ft.Row([self.mode_type, self.name, ft.Container(expand=True),
                              ft.FilledButton(t("gp_save"), icon=ft.Icons.SAVE, on_click=self.on_save),
                              ft.TextButton(t("pc_reset"), icon=ft.Icons.RESTART_ALT, on_click=self.on_reset)],
@@ -310,7 +310,7 @@ class GamepadTab:
             self.view_hint.value = self.t("gp_view_live")
         elif mode_type(self.config["modes"][self.config["mode"] - 1]) == "dsu":
             self.view_hint.value = self.t("gp_view_dsu")
-        elif mode_type(self.config["modes"][self.config["mode"] - 1]) == "pc":
+        elif mode_type(self.config["modes"][self.config["mode"] - 1]) in PC_TYPES:
             self.view_hint.value = self.t("gp_view_pc")
         else:
             self.view_hint.value = self.t("gp_view_idle")
@@ -326,7 +326,7 @@ class GamepadTab:
             return None
         result = copy.deepcopy(template)
         result["name"] = self.name.value
-        if mode_type(template) == "pc":
+        if mode_type(template) in PC_TYPES:
             result = self.pc_editor.collect(template)
             result["name"] = self.name.value
             return result
@@ -394,7 +394,8 @@ class GamepadTab:
 
     async def on_type(self, e):
         config = copy.deepcopy(self.config)
-        fresh = {"xbox": GAME_TEMPLATE, "dsu": DSU_TEMPLATE, "pc": PC_TEMPLATE}.get(e.control.value)
+        fresh = {"xbox": GAME_TEMPLATE, "dsu": DSU_TEMPLATE, "pc": PC_TEMPLATE,
+                 "pc_game": PC_GAME_TEMPLATE}.get(e.control.value)
         config["modes"][self.editing - 1] = copy.deepcopy(fresh) if fresh else None
         if await self.apply(config):
             self.render_editor()
@@ -413,7 +414,8 @@ class GamepadTab:
     async def on_reset(self, e):
         config = copy.deepcopy(self.config)
         kind = mode_type(config["modes"][self.editing - 1])
-        config["modes"][self.editing - 1] = copy.deepcopy(PC_TEMPLATE if kind == "pc" else GAME_TEMPLATE)
+        defaults = {"pc": PC_TEMPLATE, "pc_game": PC_GAME_TEMPLATE}.get(kind, GAME_TEMPLATE)
+        config["modes"][self.editing - 1] = copy.deepcopy(defaults)
         if await self.apply(config):
             self.render_editor()
             self.controller.page.update()

@@ -25,9 +25,26 @@ Whatever moves the mouse **cannot also be mapped**. With the D-pad or the Nunchu
 as the mouse, their rows are disabled in the editor and the configuration refuses
 them.
 
+**A + B together** (both PC modes, *Mouse* card):
+
+- **Recenter the pointer** (default in PC) puts the pointer in the centre of the monitor it is on (with several monitors it stays on that one).
+- **Pause the gyro while held** (default in PC Game) means the gyroscope doesn't move the
+  mouse while you hold A + B. Re-point the remote comfortably, release, and the aim carries
+  on from where it was. In games this is the way to recenter: moving the pointer would jerk
+  the camera.
+- **Nothing** turns it off.
+
+Pressed together (within 60 ms), A and B don't click. Alone they act as mapped. In PC Game
+B (the trigger) never waits; if A follows within 60 ms, the shot stops.
+
+**Freeze the gyro mouse when shaking** (on by default, PC and PC Game): shaking the
+Wiimote (e.g. a melee hit) would spin the aim. The gyro is ignored while it shakes, for
+0.3 s after, and for any turn faster than the limit (300 °/s by default; aiming never gets
+there). The aim stays where it was before the hit.
+
 With the gyroscope, the quick calibration (*Controllers* tab) removes the drift and, with
 **Recenter the mouse when recalibrating** (on by default), also puts the pointer in the
-centre of the screen. Point the remote at the centre while you recalibrate, and remote and
+centre of the monitor it is on. Point the remote at the centre while you recalibrate, and remote and
 pointer line up again. If the
 pointer still creeps, raise the dead zone a little.
 
@@ -59,6 +76,52 @@ aliases also work (`control`, `escape`, `del`, `pgup`…), in any case.
 **Toggle steps** are separated by `|`. A step is keys (no prefix needed), `mouse:…`,
 `system:…` or `open:…`, e.g. `toggle:ctrl+c | ctrl+v` or
 `toggle:open:notepad | keys:alt+f4`.
+
+## Super shortcuts
+
+Two or three inputs held together can run an action of their own, for example **1 + −**
+→ `ctrl+add+oemcomma`. They are off by default: turn them on in the editor's *Super
+shortcuts* card (both PC modes), which has up to 8 rows.
+
+- Each shortcut's buttons wait the **shortcut window** (50 ms by default, 0–300) for the
+  rest.
+- If the shortcut completes, only its action runs. It is held while you hold the shortcut,
+  and its buttons do nothing else until released, even if you let go of one first.
+- If it does not complete, each button acts on its own after the window.
+- Buttons that are in no shortcut never wait.
+- Inputs: any button, the Nunchuk stick directions or shakes, but not what moves the
+  mouse. Actions: the same as for buttons (only game actions in PC Game).
+
+Windows key names work too: `add`, `subtract`, `multiply`, `divide`, `decimal` (numpad),
+`oemcomma`, `oemperiod`, `oemplus`, `oemminus`, `oem1`–`oem7`, with or without `_`.
+
+## PC Game mode
+
+Mode 4 by default (hold **B** and press **←**). It works like PC mode but is meant for
+games:
+
+- **Actions:** only **keys, mouse buttons and toggles**. System keys (volume, media, Start
+  menu) and **open** are not available, so a misplaced button can't pull you out of a game.
+- **Mouse:** always relative (gyroscope, Nunchuk stick or D-pad), which is what games read
+  for camera and aim. The IR pointer (absolute) and *Recenter the mouse when recalibrating*
+  are not available: moving the pointer jerks the camera.
+- **Modifier (B):** acts at once and stays held, so B can be the trigger and hold
+  automatic fire. Modifier + arrow still switches mode. B is held for that moment, so in a
+  game it fires briefly.
+
+Default layout (shooter-style):
+
+| Input | Key |
+|---|---|
+| Nunchuk stick | W A S D |
+| B (trigger) / Z | Left click (shoot) / right click (aim) |
+| C / A | Space (jump) / E (use) |
+| 1 / 2 | Ctrl (crouch) / Shift (run, held) |
+| Shaking the Nunchuk | Shift (run: a short press, set sprint to *toggle* in the game) |
+| D-pad ↑ ↓ ← → | R / Q / F / G |
+| − / + / Home | Tab / M / Esc |
+| Shaking the Wiimote | V (melee) |
+| Gyroscope | Mouse (aim) |
 
 ## Defaults
 

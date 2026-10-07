@@ -32,7 +32,11 @@ plantilla Xbox (`"type": "xbox"`, por defecto) o `{"type": "dsu", "name": "DSU",
 (`"type": "pc"`: `mouse` con `source` `gyro`/`ir`/`nc_stick`/`wm_dpad`/null y sus velocidades,
 `shake_g`, y `buttons` que asigna entradas como `wm_a` o `nc_up` a acciones como
 `"keys:ctrl+9"`, `"mouse:left"`, `"system:mute"`, `"open:notepad"` o
-`"toggle:ctrl+c | ctrl+v"`; ver [PC_MODE.es.md](PC_MODE.es.md)). Un modo 3 vacío en una
+`"toggle:ctrl+c | ctrl+v"`; `shortcuts_enabled`, `shortcut_window_ms` y `shortcuts`
+(`[{"inputs": ["wm_1", "wm_minus"], "action": "keys:ctrl+add+oemcomma"}]`); ver [PC_MODE.es.md](PC_MODE.es.md)), o una plantilla PC Game
+(`"type": "pc_game"`: los mismos campos, pero solo acciones `keys`/`mouse`/`toggle`, sin la fuente
+de ratón `ir`, `recenter_on_calibration` siempre false y `modifier_on_release` false por defecto).
+Un modo 4 vacío en una configuración anterior a `"version": 5` pasa a ser PC Game. Un modo 3 vacío en una
 configuración anterior a `"version": 4` pasa a ser el modo PC. Los
 clientes DSU solo reciben entradas mientras hay un modo DSU activo; en los demás modos los
 slots siguen conectados con datos neutros (10 paquetes por segundo en vez de uno por reporte). Una configuración sin `"version": 2` con el modo
@@ -62,7 +66,7 @@ el que esté sonando. `speaker_config` (`{"config": {...}}`) reemplaza los sonid
 eventos (`enabled`, `volume`, `events`); ver [SPEAKER.es.md](SPEAKER.es.md).
 
 `slot_options` (`quick_calibration`, `combo` — `minus+plus`, `down`, `one+two`, `a+b`, `home`,
-`minus+home+plus` —, `combo_hold_ms` 200–3000, `combo_window_ms` 0–1000, `ir_calibration`) cambia en vivo las opciones de
+`minus+home+plus` —, `combo_hold_ms` 200–3000, `combo_window_ms` 0–1000, `debounce_ms` 0–100, `ir_calibration`) cambia en vivo las opciones de
 calibración rápida y por barra sensora de un
 slot (solo los campos indicados; la respuesta los incluye todos) y `quick_calibrate`
 ejecuta la misma calibración rápida que la combinación de botones (respuesta

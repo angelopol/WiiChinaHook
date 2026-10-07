@@ -35,6 +35,9 @@ class FakeOutput:
     def move_abs(self, u, v):
         self.events.append(("abs", round(u, 3), round(v, 3)))
 
+    def center(self):
+        self.events.append(("center",))
+
     def launch(self, target):
         self.events.append(("launch", target))
 
@@ -45,7 +48,8 @@ class FakeOutput:
 
 
 def template(**buttons):
-    t = {"type": "pc", "mouse": {"source": None}, "buttons": buttons}
+    # The A + B mouse gesture has its own test; off here so A and B act at once.
+    t = {"type": "pc", "mouse": {"source": None, "ab_action": None}, "buttons": buttons}
     return validate_template(t)
 
 
@@ -222,21 +226,227 @@ def test_quick_calibration_recentres_the_gyro_mouse():
     engine = PcEngine(out)
     calibrated = lambda t, seq: dict(snap(t, gyro=(0.0, 0.0, 0.0)), calibration={"recenter_seq": seq})
     engine.update(calibrated(0.0, 3), set(), tpl, "wm_b", 0.0)         # entering the mode: no jump
-    assert out.take("abs") == []
+    assert out.take("center") == []
     engine.update(calibrated(0.1, 4), set(), tpl, "wm_b", 0.1)         # quick calibration fired
-    assert out.take("abs") == [("abs", 0.5, 0.5)]
+    assert out.take("center") == [("center",)]
     engine.update(calibrated(0.2, 4), set(), tpl, "wm_b", 0.2)
-    assert out.take("abs") == []                                        # once per calibration
+    assert out.take("center") == []                                        # once per calibration
     off = validate_template({"type": "pc", "mouse": {"source": "gyro", "recenter_on_calibration": False},
                              "buttons": {}})
     engine = PcEngine(out)
     engine.update(calibrated(0.0, 1), set(), off, "wm_b", 0.0)
     engine.update(calibrated(0.1, 2), set(), off, "wm_b", 0.1)
-    assert out.take("abs") == []                                        # switched off
+    assert out.take("center") == []                                        # switched off
     stick = validate_template({"type": "pc", "mouse": {"source": "nc_stick"}, "buttons": {}})
     engine = PcEngine(out)
     engine.update(calibrated(0.0, 1), set(), stick, "wm_b", 0.0)
     engine.update(calibrated(0.1, 2), set(), stick, "wm_b", 0.1)
-    assert out.take("abs") == []                                        # only the gyro mouse
+    assert out.take("center") == []                                        # only the gyro mouse
     with pytest.raises(ValueError):
         validate_template({"type": "pc", "mouse": {"recenter_on_calibration": "yes"}, "buttons": {}})
+
+
+def test_pc_game_mode_is_for_games_only():
+    from wiichinahook.gamepad.pc import PC_GAME_TEMPLATE
+    tpl = validate_template(PC_GAME_TEMPLATE)
+    assert tpl["type"] == "pc_game" and tpl["buttons"]["nc_up"] == "keys:w" and tpl["buttons"]["wm_b"] == "mouse:left"
+    assert tpl["mouse"]["source"] == "gyro" and tpl["mouse"]["recenter_on_calibration"] is False
+    game = {"type": "pc_game", "mouse": {"source": "gyro"}}
+    for bad in ({"buttons": {"wm_a": "system:mute"}}, {"buttons": {"wm_a": "open:notepad"}},
+                {"buttons": {"wm_a": "toggle:keys:1 | system:mute"}}, {"mouse": {"source": "ir"}}):
+        with pytest.raises(ValueError):
+            validate_template(dict(game, **bad))
+    forced = validate_template({"type": "pc_game", "mouse": {"source": "gyro", "recenter_on_calibration": True}})
+    assert forced["mouse"]["recenter_on_calibration"] is False       # never warps a game camera
+    assert validate_config(None)["modes"][3]["type"] == "pc_game"    # mode 4 by default
+
+
+def test_pc_game_trigger_fires_at_once_and_stays_held():
+    out = FakeOutput()
+    tpl = validate_template({"type": "pc_game", "mouse": {"source": None}, "buttons": {"wm_b": "mouse:left"}})
+    engine = PcEngine(out)
+    engine.update(snap(0.0), set(), tpl, "wm_b", 0.0)
+    engine.update(snap(0.01), {"wm_b"}, tpl, "wm_b", 0.01)           # B is the modifier and the trigger
+    assert out.take() == [("button", "left", True)]                  # fires at once (no wait for release)
+    engine.update(snap(0.5), {"wm_b"}, tpl, "wm_b", 0.5)
+    assert out.take() == []                                           # held: automatic fire keeps going
+    engine.update(snap(0.6), set(), tpl, "wm_b", 0.6)
+    assert out.take() == [("button", "left", False)]
+
+
+async def test_hub_runs_pc_game_like_pc_mode():
+    out = FakeOutput()
+    hub = GamepadHub(None, pc_output=out, loop=asyncio.get_running_loop())
+    hub.set_mode(4)
+    assert hub.mode_type == "pc_game" and hub.pads == {}
+    s = WiimoteState("02:00:44:42:00:00", 0, True)
+    s.capabilities = {"buttons": True, "accelerometer": True, "ir": True, "motionplus": True, "nunchuk": True}
+    s.accel_g, s.nunchuk = (0.0, 0.0, 1.0), {"stick": [0.0, 0.95], "c": False, "z": False, "accel_raw": [512, 512, 712]}
+    s.timestamp_us = 0
+    hub.update(s)                                                    # stick already pushed: ignored at start
+    s.nunchuk = dict(s.nunchuk, stick=[0.0, 0.0]); s.timestamp_us = 10_000
+    hub.update(s)
+    s.nunchuk = dict(s.nunchuk, stick=[0.0, 0.95]); s.timestamp_us = 20_000
+    hub.update(s)
+    assert ("key", KEYS["w"][0], True) in out.events                 # Nunchuk forward = W
+    hub.close()
+
+
+def swing_pixels(freeze, kind="pc_game"):
+    """Aim, then a melee swing (fast turn + jolt) and its recoil, in continuous 5 ms
+    reports; returns (pixels moved by the swing, events)."""
+    out = FakeOutput()
+    tpl = validate_template({"type": kind, "mouse": {"source": "gyro", "gyro_deadzone": 0,
+                                                     "freeze_on_shake": freeze},
+                             "buttons": {"wm_shake_y": "keys:v"}})
+    engine = PcEngine(out)
+    t = 0.0
+    def step(gyro, accel=(0.0, 0.0, 1.0)):
+        nonlocal t
+        engine.update(dict(snap(t, gyro=gyro), accel_g=accel), set(), tpl, "wm_b", t)
+        t += 0.005
+    for _ in range(20):
+        step((-20.0, 0.0, 0.0))                                   # aiming
+    aimed = sum(e[1] for e in out.take("move"))
+    for i in range(10):                                          # the swing: speeds up, then the jolt
+        step((-150.0 if i < 3 else -600.0, 0.0, 250.0), (0.0, 2.5, 1.0) if i in (6, 7) else (0.0, 0.0, 1.0))
+    for _ in range(20):
+        step((200.0, 0.0, -150.0))                                # recoil after the hit
+    swing = sum(abs(e[1]) + abs(e[2]) for e in out.take("move"))
+    t += 0.35
+    for _ in range(5):
+        step((-20.0, 0.0, 0.0))                                   # aiming again
+    return aimed, swing, sum(e[1] for e in out.take("move")), out
+
+
+@pytest.mark.parametrize("kind", ["pc", "pc_game"])
+def test_a_wiimote_shake_does_not_spin_the_gyro_aim(kind):
+    tpl = validate_template({"type": kind, "mouse": {"source": "gyro"}, "buttons": {}})
+    assert tpl["mouse"]["freeze_on_shake"] is True and tpl["mouse"]["freeze_dps"] == 300   # on by default
+    aimed, swing, after, out = swing_pixels(freeze=True, kind=kind)
+    _, unfrozen, _, _ = swing_pixels(freeze=False, kind=kind)
+    assert aimed > 0 and after > 0                                # aiming works before and after
+    assert unfrozen > 2500 and swing < 0.1 * unfrozen            # the hit barely moves the aim
+    assert ("key", KEYS["v"][0], True) in out.events             # and the melee key still fires
+
+
+def test_pc_game_runs_by_shaking_the_nunchuk():
+    from wiichinahook.gamepad.pc import PC_GAME_TEMPLATE
+    tpl = validate_template(PC_GAME_TEMPLATE)
+    assert {tpl["buttons"][f"nc_shake_{a}"] for a in "xyz"} == {"keys:shift"} and tpl["buttons"]["wm_2"] == "keys:shift"
+
+
+SETTLE_GAP = 0.35
+
+
+def test_a_plus_b_recentres_the_pointer_or_pauses_the_gyro():
+    out = FakeOutput()
+    tpl = validate_template({"type": "pc", "mouse": {"source": "gyro", "gyro_deadzone": 0},
+                             "buttons": {"wm_a": "mouse:left", "wm_b": "mouse:right"}})
+    assert tpl["mouse"]["ab_action"] == "center"                     # PC default
+    engine = PcEngine(out)
+    step = lambda t, pressed, gyro=(0.0, 0.0, 0.0): engine.update(snap(t, gyro=gyro), set(pressed), tpl, "wm_b", t)
+    step(0.00, set())
+    step(0.01, {"wm_a"})
+    step(0.03, {"wm_a", "wm_b"})                                    # together (20 ms apart)
+    step(0.20, {"wm_a", "wm_b"})
+    step(0.30, set())
+    assert out.take() == [("center",)]                              # centred once, no clicks
+    step(0.40, {"wm_a"})
+    step(0.50, {"wm_a"})
+    step(0.55, set())
+    assert out.take() == [("button", "left", True), ("button", "left", False)]   # A alone still clicks
+
+    game = validate_template({"type": "pc_game", "mouse": {"gyro_deadzone": 0},
+                              "buttons": {"wm_a": "keys:e", "wm_b": "mouse:left"}})
+    assert game["mouse"]["ab_action"] == "regrip"                  # PC Game default
+    engine = PcEngine(out)
+    gstep = lambda t, pressed, gyro: engine.update(snap(t, gyro=gyro), set(pressed), game, "wm_b", t)
+    gstep(0.00, set(), (0.0, 0.0, 0.0))
+    gstep(0.01, {"wm_b"}, (0.0, 0.0, 0.0))
+    assert out.take() == [("button", "left", True)]                # the trigger never waits
+    gstep(0.02, set(), (0.0, 0.0, 0.0))
+    out.take()
+    gstep(0.10, {"wm_a"}, (0.0, 0.0, 0.0))
+    gstep(0.11, {"wm_a", "wm_b"}, (0.0, 0.0, 0.0))                 # A + B: re-grip
+    for i in range(20):                                            # re-pointing the remote: no aim
+        gstep(0.12 + i * 0.005, {"wm_a", "wm_b"}, (-200.0, 0.0, 100.0))
+    assert out.take() == []                                         # no shot, no use, no movement
+    gstep(0.30, set(), (0.0, 0.0, 0.0))
+    for i in range(5):
+        gstep(0.31 + i * 0.005, set(), (-40.0, 0.0, 0.0))
+    assert sum(e[1] for e in out.take("move")) > 0                 # released: aiming resumes
+    with pytest.raises(ValueError):
+        validate_template({"type": "pc", "mouse": {"ab_action": "spin"}})
+
+
+def test_centre_of_a_monitor_in_desktop_coordinates():
+    from wiichinahook.gamepad.winput import rect_center
+    assert rect_center(0, 0, 1920, 1080) == (960, 540)
+    assert rect_center(-2560, -300, 0, 1140) == (-1280, 420)      # a monitor left of the primary
+    assert rect_center(1920, 0, 3840, 1080) == (2880, 540)         # a second monitor on the right
+
+
+@pytest.mark.skipif(__import__("sys").platform != "win32", reason="Windows API")
+def test_current_monitor_contains_the_cursor():
+    import ctypes
+    from wiichinahook.gamepad.winput import POINT, WindowsInput
+    w = WindowsInput()                                             # read-only: the cursor is not moved
+    left, top, right, bottom = w.current_monitor()
+    point = POINT()
+    w.user32.GetCursorPos(ctypes.byref(point))
+    assert left <= point.x < right and top <= point.y < bottom
+
+
+def shortcut_template(enabled=True, **buttons):
+    return validate_template({"type": "pc", "mouse": {"source": None, "ab_action": None},
+                              "buttons": buttons or {"wm_1": "keys:1", "wm_minus": "system:volume_down"},
+                              "shortcuts_enabled": enabled,
+                              "shortcuts": [{"inputs": ["wm_1", "wm_minus"], "action": "keys:ctrl+add+oemcomma"}]})
+
+
+def test_super_shortcut_runs_its_own_keys_and_not_its_buttons():
+    out = FakeOutput()
+    tpl = shortcut_template()
+    assert tpl["shortcuts"] == [{"inputs": ["wm_1", "wm_minus"], "action": "keys:ctrl+add+oemcomma"}]
+    engine = PcEngine(out)
+    run(engine, tpl, [(0.00, set()), (0.01, {"wm_1"}), (0.03, {"wm_1", "wm_minus"})])   # − 20 ms after 1
+    assert out.take() == [("key", KEYS["ctrl"][0], True), ("key", KEYS["num_add"][0], True),
+                          ("key", KEYS[","][0], True)]                       # held, in order
+    run(engine, tpl, [(0.50, {"wm_1", "wm_minus"})])
+    assert out.take() == []                                                 # still held, no repeats
+    run(engine, tpl, [(0.60, {"wm_minus"}), (0.70, set())])                # 1 released first
+    assert out.take() == [("key", KEYS[","][0], False), ("key", KEYS["num_add"][0], False),
+                          ("key", KEYS["ctrl"][0], False)]                 # released; − never acted alone
+
+
+def test_incomplete_or_disabled_shortcut_leaves_the_buttons_alone():
+    out = FakeOutput()
+    tpl = shortcut_template()
+    engine = PcEngine(out)
+    run(engine, tpl, [(0.00, set()), (0.01, {"wm_1"}), (0.03, {"wm_1"})])
+    assert out.take() == []                                                 # 1 waits the 50 ms window
+    run(engine, tpl, [(0.07, {"wm_1"})])
+    assert out.take() == [("key", KEYS["1"][0], True)]                      # no partner: 1 acts alone
+    run(engine, tpl, [(0.10, set())])
+    out.take()
+    off = shortcut_template(enabled=False)                                  # off by default too
+    assert validate_template({"type": "pc"})["shortcuts_enabled"] is False
+    engine = PcEngine(out)
+    run(engine, off, [(0.00, set()), (0.01, {"wm_1"})])
+    assert out.take() == [("key", KEYS["1"][0], True)]                      # disabled: no wait at all
+
+
+def test_shortcut_validation():
+    base = {"type": "pc", "mouse": {"source": "wm_dpad"}, "buttons": {}}
+    for bad in ([{"inputs": ["wm_1"], "action": "keys:a"}],                          # one input
+                [{"inputs": ["wm_1", "wm_1"], "action": "keys:a"}],                  # repeated
+                [{"inputs": ["wm_1", "wm_up"], "action": "keys:a"}],                 # the D-pad moves the mouse
+                [{"inputs": ["wm_1", "wm_2"], "action": "keys:nokey"}],              # bad action
+                [{"inputs": ["wm_1", "wm_9"], "action": "keys:a"}]):                 # unknown input
+        with pytest.raises(ValueError):
+            validate_template(dict(base, shortcuts=bad))
+    with pytest.raises(ValueError):                                                 # PC Game: no system keys
+        validate_template({"type": "pc_game", "shortcuts": [{"inputs": "wm_1+wm_2", "action": "system:mute"}]})
+    ok = validate_template(dict(base, shortcuts=[{"inputs": "wm_1+nc_c+wm_shake_x", "action": "oem_period"}]))
+    assert ok["shortcuts"][0] == {"inputs": ["wm_1", "nc_c", "wm_shake_x"], "action": "keys:oem_period"}

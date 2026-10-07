@@ -332,7 +332,7 @@ class DolphinBarManager:
         if not isinstance(slot, int) or slot not in range(4):
             raise ValueError("slot must be 0..3")
         unknown = set(changes) - {"quick_calibration", "combo", "ir_calibration", "combo_hold_ms",
-                                 "combo_window_ms"}
+                                 "combo_window_ms", "debounce_ms"}
         if unknown:
             raise ValueError(f"Unknown option: {', '.join(sorted(unknown))}")
         current = asdict(self.slot_options[slot])

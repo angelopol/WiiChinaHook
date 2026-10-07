@@ -153,7 +153,7 @@ async def test_live_slot_options_through_the_api(tmp_path):
     api = ApiServer(manager)
     result = await api.dispatch("slot_options", {"slot": 2, "quick_calibration": True, "combo": "one+two"})
     assert result == {"slot": 2, "quick_calibration": True, "combo": "one+two", "ir_calibration": False,
-                      "combo_hold_ms": 600, "combo_window_ms": 100}
+                      "combo_hold_ms": 600, "combo_window_ms": 100, "debounce_ms": 20}
     assert applied == [SlotOptions(True, "one+two", False)]
     with pytest.raises(ValueError, match="combo"):
         await api.dispatch("slot_options", {"slot": 2, "combo": "shake"})
@@ -170,7 +170,8 @@ async def test_recalibration_combo_buttons_never_reach_the_outputs():
     session.attach(Channel())
     session.initialized = True
     session.state.capabilities["motionplus"] = True
-    session.apply_options(SlotOptions(quick_calibration=True, combo="minus+home+plus", combo_hold_ms=200))
+    session.apply_options(SlotOptions(quick_calibration=True, combo="minus+home+plus", combo_hold_ms=200,
+                                      debounce_ms=0))   # instant toggles below are not bounces here
     session.quick_calibrate = AsyncMock()
     MINUS, HOME, PLUS, A = 0x0010, 0x0080, 0x1000, 0x0008
     session.receive(buttons_report(MINUS | A))           # − first: held back, A goes out at once
@@ -216,7 +217,8 @@ async def test_combination_window_is_configurable_per_remote():
     session = WiimoteSession(WiimoteState(), AsyncMock(), lambda state: published.append(state.buttons))
     session.attach(Channel())
     session.initialized = True
-    session.apply_options(SlotOptions(quick_calibration=True, combo="minus+home+plus", combo_window_ms=300))
+    session.apply_options(SlotOptions(quick_calibration=True, combo="minus+home+plus", combo_window_ms=300,
+                                      debounce_ms=0))
     session.quick_calibrate = AsyncMock()
     HOME, PLUS = 0x0080, 0x1000
     session.receive(buttons_report(HOME))
@@ -232,7 +234,8 @@ async def test_combination_window_is_configurable_per_remote():
     session.receive(buttons_report(HOME | PLUS))
     assert published[-1] == HOME | PLUS             # + too: combination never completed, both act
     session.receive(buttons_report(0))
-    session.apply_options(SlotOptions(quick_calibration=True, combo="minus+home+plus", combo_window_ms=0))
+    session.apply_options(SlotOptions(quick_calibration=True, combo="minus+home+plus", combo_window_ms=0,
+                                      debounce_ms=0))
     session.receive(buttons_report(HOME))
     assert published[-1] == HOME                    # window 0: no wait at all
     from wiichinahook.config import slot_options_from
@@ -241,3 +244,65 @@ async def test_combination_window_is_configurable_per_remote():
         with pytest.raises(ValueError):
             slot_options_from({"combo_window_ms": bad})
     await session.close()
+
+
+def bouncing_session(debounce_ms=20):
+    published = []
+    session = WiimoteSession(WiimoteState(), AsyncMock(), lambda state: published.append(state.buttons))
+    session.attach(Channel())
+    session.apply_options(SlotOptions(debounce_ms=debounce_ms))
+    return session, published
+
+
+def presses(published, bit):
+    return sum(1 for before, after in zip([0] + published, published) if after & bit and not before & bit)
+
+
+async def test_debounce_turns_a_bouncing_a_button_into_one_press():
+    A = 0x0008
+    session, published = bouncing_session()
+    # Consecutive reports (no sleep: asyncio.sleep is ~15 ms on Windows, longer than a bounce).
+    for mask in (A, 0, A, 0, A):                       # contact bouncing
+        session.receive(buttons_report(mask))
+    assert published[0] == A                           # the first edge goes out at once (no latency)
+    for _ in range(3):                                 # held
+        await asyncio.sleep(0.01)
+        session.receive(buttons_report(A))
+    for mask in (0, A, 0):                             # release, bouncing too
+        session.receive(buttons_report(mask))
+    await asyncio.sleep(0.025)
+    session.receive(buttons_report(0))
+    assert presses(published, A) == 1 and published[-1] == 0   # one press, then released
+
+    raw, _ = bouncing_session(debounce_ms=0)           # filter off: every bounce is a press
+    for mask in (A, 0, A, 0, A):
+        raw.receive(buttons_report(mask))
+    assert presses(_, A) == 3
+
+
+async def test_debounce_keeps_fast_real_presses_and_other_buttons():
+    A, B = 0x0008, 0x0004
+    session, published = bouncing_session()
+    for _ in range(5):                                 # a fast human tapping: ~60 ms per press
+        session.receive(buttons_report(A))
+        await asyncio.sleep(0.03)
+        session.receive(buttons_report(0))
+        await asyncio.sleep(0.03)
+    assert presses(published, A) == 5
+    session.receive(buttons_report(A))
+    session.receive(buttons_report(A | B))             # B right after A: its own filter
+    assert published[-1] == A | B
+
+
+async def test_debounce_covers_the_nunchuk_buttons():
+    session, _ = bouncing_session()
+    seen = []
+    for c in (True, False, True, False):               # C bouncing
+        session.state.nunchuk = {"stick": [0, 0], "c": c, "z": False}
+        session.debounce()
+        seen.append(session.state.nunchuk["c"])
+    assert seen == [True, True, True, True]            # held steady through the bounce
+    await asyncio.sleep(0.025)
+    session.state.nunchuk = {"stick": [0, 0], "c": False, "z": False}
+    session.debounce()
+    assert session.state.nunchuk["c"] is False         # the real release after the window

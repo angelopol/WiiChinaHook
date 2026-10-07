@@ -54,6 +54,8 @@ class WiimoteSession:
         self.axis_samples = None
         self.accel_samples = None
         self.options = SlotOptions()
+        self.debounced = 0           # buttons after the bounce filter (bits; Nunchuk C/Z above 0xFFFF)
+        self.debounce_at = {}        # bit -> when it last changed
         self.combo_since = None
         self.combo_fired = False
         self.quick_task = None
@@ -196,6 +198,7 @@ class WiimoteSession:
                 self.motionplus_port_connected = attached
                 if (previous is not None and attached != previous) or (previous is None and attached != (self.parser.extension == "motionplus+nunchuk")):
                     self.schedule_reconfigure()
+        self.debounce()                      # before anything reads the buttons
         if self.initialized:
             raw = self.state.buttons
             self.check_combo(raw)
@@ -212,6 +215,35 @@ class WiimoteSession:
         self.combo_down, self.combo_latched, self.combo_taps = {}, 0, {}
 
     COMBO_TAP = 0.06     # s a quick tap of one is still sent for
+    NUNCHUK_C, NUNCHUK_Z = 1 << 16, 1 << 17   # debounced with the core buttons
+
+    def debounce(self):
+        """Leading-edge switch-bounce filter (options.debounce_ms): a button's first
+        change goes through at once (no added latency); further changes of that
+        button within the window are ignored, so a bouncing contact cannot produce
+        extra presses. A real change held past the window is taken on the next report
+        (reports are continuous). Covers the core buttons and Nunchuk C/Z."""
+        nunchuk = self.state.nunchuk
+        raw = self.state.buttons
+        if nunchuk:
+            raw |= (self.NUNCHUK_C if nunchuk.get("c") else 0) | (self.NUNCHUK_Z if nunchuk.get("z") else 0)
+        window = self.options.debounce_ms / 1000
+        if window <= 0:
+            self.debounced = raw
+            return
+        now = time.monotonic()
+        changed = raw ^ self.debounced
+        while changed:
+            bit = changed & -changed
+            changed ^= bit
+            if now - self.debounce_at.get(bit, float("-inf")) >= window:
+                self.debounced ^= bit
+                self.debounce_at[bit] = now
+        stable = self.debounced
+        self.state.buttons = stable & 0xFFFF
+        if nunchuk and (bool(stable & self.NUNCHUK_C) != bool(nunchuk.get("c"))
+                        or bool(stable & self.NUNCHUK_Z) != bool(nunchuk.get("z"))):
+            self.state.nunchuk = dict(nunchuk, c=bool(stable & self.NUNCHUK_C), z=bool(stable & self.NUNCHUK_Z))
 
     def combo_filter(self, buttons):
         """Hide the recalibration combination from every output (Xbox, DSU, PC, API):

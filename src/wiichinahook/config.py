@@ -85,6 +85,9 @@ class SlotOptions:
     combo_hold_ms: int = 600
     # How long each of its buttons waits for the others before acting on its own.
     combo_window_ms: int = 100
+    # Switch-bounce filter (cheap clones bounce, notably on A): after a button changes,
+    # further changes of that button within this many ms are ignored. 0 = off.
+    debounce_ms: int = 20
 
 
 def slot_options_from(data) -> SlotOptions:
@@ -94,9 +97,12 @@ def slot_options_from(data) -> SlotOptions:
     window = data.get("combo_window_ms", 100)
     if isinstance(window, bool) or not isinstance(window, (int, float)) or not 0 <= window <= 1000:
         raise ValueError("combo_window_ms must be 0..1000")
+    debounce = data.get("debounce_ms", 20)
+    if isinstance(debounce, bool) or not isinstance(debounce, (int, float)) or not 0 <= debounce <= 100:
+        raise ValueError("debounce_ms must be 0..100")
     combo = data.get("combo", "minus+plus")
     options = SlotOptions(bool(data.get("quick_calibration", False)), COMBO_ALIASES.get(combo, combo),
-                          bool(data.get("ir_calibration", False)), int(hold), int(window))
+                          bool(data.get("ir_calibration", False)), int(hold), int(window), int(debounce))
     if options.combo not in COMBOS:
         raise ValueError(f"combo must be one of {', '.join(COMBOS)}")
     return options
@@ -208,7 +214,8 @@ def config_to_dict(config: AppConfig, base_dir: Path | None = None) -> dict:
         "ir": config.ir,
         "motionplus": config.motionplus,
         "slots": [{"quick_calibration": o.quick_calibration, "combo": o.combo, "ir_calibration": o.ir_calibration,
-                   "combo_hold_ms": o.combo_hold_ms, "combo_window_ms": o.combo_window_ms}
+                   "combo_hold_ms": o.combo_hold_ms, "combo_window_ms": o.combo_window_ms,
+                   "debounce_ms": o.debounce_ms}
                   for o in config.slots],
         "gamepad": config.gamepad,
         "speaker": config.speaker,

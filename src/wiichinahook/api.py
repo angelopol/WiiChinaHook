@@ -151,7 +151,7 @@ class ApiServer:
             return await self.manager.forget(slot)
         if command == "slot_options":
             options = {k: args.get(k) for k in ("quick_calibration", "combo", "ir_calibration", "combo_hold_ms",
-                                                 "combo_window_ms")}
+                                                 "combo_window_ms", "debounce_ms")}
             return self.manager.set_slot_options(slot, **options)
         if command == "quick_calibrate":
             return await self.manager.session_for(slot).quick_calibrate()

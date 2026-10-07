@@ -26,9 +26,27 @@ Lo que mueve el ratón **no se puede mapear también**. Con la cruceta o el stic
 Nunchuk como ratón, sus filas quedan desactivadas en el editor y la configuración las
 rechaza.
 
+**A + B a la vez** (los dos modos PC, tarjeta *Ratón*):
+
+- **Recentrar el puntero** (por defecto en PC) lleva el puntero al centro del monitor en el que está (con varios monitores se queda en ese).
+- **Pausar el giroscopio mientras se mantienen** (por defecto en PC Game) hace que el
+  giroscopio no mueva el ratón mientras mantienes A + B. Vuelve a apuntar el mando cómodo,
+  suelta, y la mira sigue desde donde estaba. En juegos es la forma de recentrar: mover el
+  puntero movería la cámara de golpe.
+- **Nada** lo desactiva.
+
+Pulsados a la vez (con menos de 60 ms entre ellos), A y B no hacen clic. Por separado hacen
+lo que tengan asignado. En PC Game, B (el gatillo) nunca espera; si A llega en los 60 ms
+siguientes, el disparo se detiene.
+
+**Congelar el ratón del giroscopio al agitar** (activado por defecto, PC y PC Game): agitar
+el Wiimote (p. ej. un golpe cuerpo a cuerpo) haría girar la mira. Se ignora el giroscopio
+mientras se agita, 0,3 s después y en cualquier giro más rápido que el límite (300 °/s por
+defecto; al apuntar nunca se llega). La mira se queda donde estaba antes del golpe.
+
 Con el giroscopio, la calibración rápida (pestaña *Mandos*) elimina la deriva y, con
 **Recentrar el ratón al recalibrar** (activado por defecto), también lleva el puntero al
-centro de la pantalla. Apunta el mando al centro mientras recalibras, y mando y puntero
+centro del monitor en el que está. Apunta el mando al centro mientras recalibras, y mando y puntero
 vuelven a coincidir. Si el
 puntero sigue moviéndose solo, sube un poco la zona muerta.
 
@@ -60,6 +78,55 @@ alias comunes (`control`, `escape`, `del`, `pgup`…), en mayúsculas o minúscu
 **Los pasos de Alternar** se separan con `|`. Un paso es teclas (sin prefijo), `mouse:…`,
 `system:…` u `open:…`, p. ej. `toggle:ctrl+c | ctrl+v` o
 `toggle:open:notepad | keys:alt+f4`.
+
+## Superatajos
+
+Dos o tres entradas pulsadas a la vez pueden ejecutar su propia acción, por ejemplo
+**1 + −** → `ctrl+add+oemcomma`. Vienen desactivados: actívalos en la tarjeta
+*Superatajos* del editor (los dos modos PC), que tiene hasta 8 filas.
+
+- Los botones de cada atajo esperan el **margen de los atajos** (50 ms por defecto, 0–300)
+  al resto.
+- Si el atajo se completa, solo se ejecuta su acción. Se mantiene mientras mantienes el
+  atajo, y sus botones no hacen nada más hasta soltarlos, aunque sueltes uno antes.
+- Si no se completa, cada botón actúa solo tras el margen.
+- Los botones que no están en ningún atajo nunca esperan.
+- Entradas: cualquier botón, las direcciones del stick del Nunchuk o las sacudidas, pero no
+  lo que mueve el ratón. Acciones: las mismas que para los botones (en PC Game, solo
+  acciones de juego).
+
+También valen los nombres de teclas de Windows: `add`, `subtract`, `multiply`, `divide`,
+`decimal` (teclado numérico), `oemcomma`, `oemperiod`, `oemplus`, `oemminus`, `oem1`–`oem7`,
+con o sin `_`.
+
+## Modo PC Game
+
+Modo 4 por defecto (mantén **B** y pulsa **←**). Funciona como el modo PC, pero pensado
+para juegos:
+
+- **Acciones:** solo **teclas, botones del ratón y alternar**. No hay teclas del sistema
+  (volumen, multimedia, menú Inicio) ni **abrir**, así un botón mal pulsado no te saca del
+  juego.
+- **Ratón:** siempre relativo (giroscopio, stick del Nunchuk o cruceta), que es lo que leen
+  los juegos para la cámara y la puntería. El puntero IR (absoluto) y *Recentrar el ratón
+  al recalibrar* no están disponibles: mover el puntero mueve la cámara de golpe.
+- **Modificador (B):** actúa al momento y se mantiene, así B puede ser el gatillo y
+  mantener el fuego automático. Modificador + flecha sigue cambiando de modo. B queda
+  pulsado ese instante, así que en un juego dispara un momento.
+
+Distribución por defecto (tipo shooter):
+
+| Entrada | Tecla |
+|---|---|
+| Stick del Nunchuk | W A S D |
+| B (gatillo) / Z | Clic izquierdo (disparar) / clic derecho (apuntar) |
+| C / A | Espacio (saltar) / E (usar) |
+| 1 / 2 | Ctrl (agacharse) / Shift (correr, mantenido) |
+| Agitar el Nunchuk | Shift (correr: pulsación corta, pon el sprint en *alternar* en el juego) |
+| Cruceta ↑ ↓ ← → | R / Q / F / G |
+| − / + / Home | Tab / M / Esc |
+| Agitar el Wiimote | V (cuerpo a cuerpo) |
+| Giroscopio | Ratón (apuntar) |
 
 ## Valores por defecto
 

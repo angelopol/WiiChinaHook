@@ -25,6 +25,7 @@ from .model import (BUTTONS, BUTTON_LABELS, bar_value, config_from_form, fmt, fo
 from .service import ServiceRuntime
 from .gamepad_tab import GamepadTab
 from .tray import Tray
+from .pc_editor import dispatch_key
 from .widgets import columns, hint, section
 from .. import __version__
 from .wiimote3d import project
@@ -124,6 +125,9 @@ class SlotCard:
                                          width=120, dense=True, tooltip=t("combo_window_hint"),
                                          data=("combo_window_ms", 0, 1000),
                                          on_blur=self.on_combo_ms, on_submit=self.on_combo_ms)
+        self.debounce = ft.TextField(value=str(options.debounce_ms), label=t("debounce_ms"), width=130,
+                                     dense=True, tooltip=t("debounce_hint"), data=("debounce_ms", 0, 100),
+                                     on_blur=self.on_combo_ms, on_submit=self.on_combo_ms)
         self.ir_switch = ft.Switch(label=t("ir_calibration"), value=options.ir_calibration,
                                    tooltip=t("ir_calibration_hint"),
                                    on_change=lambda e: self.option_changed(ir_calibration=e.control.value))
@@ -164,7 +168,8 @@ class SlotCard:
             ]),
             ft.Row(self.action_controls, wrap=True, spacing=6),
             ft.Row([ft.Text(t("leds"), size=12), *self.leds], spacing=2),
-            ft.Row([self.quick_switch, self.combo_select, self.combo_hold, self.combo_window, self.ir_switch],
+            ft.Row([self.quick_switch, self.combo_select, self.combo_hold, self.combo_window, self.debounce,
+                    self.ir_switch],
                    wrap=True, spacing=12,
                    vertical_alignment=ft.CrossAxisAlignment.CENTER),
         ])))
@@ -1025,6 +1030,7 @@ def run(config_path=None, minimized=False):
         controller = Controller(page, config_path, prefs_path)
         page.window.prevent_close = True
         page.window.on_event = controller.on_window_event
+        page.on_keyboard_event = dispatch_key    # key recording in the PC editors
         controller.build()
         controller.start_tray()
         if minimized and controller.tray:

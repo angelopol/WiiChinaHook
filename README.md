@@ -90,7 +90,7 @@ or the adapter at a time. To go back to Dolphin, stop the service.
   free remapping of every Xbox control for each of the four modes (see below). Each
   mode is Empty, Xbox or DSU; a DSU mode shows the DSU input names and the Dolphin and
   Cemu guides inside the tab.
-- **Log:** live service log.
+- **Log:** live service log; **Save log…** writes it to a `.log` file in the folder you choose.
 - English and Spanish UI (language selector in the header).
 
 The GUI runs the service in its own process and stops it when the window closes. If
@@ -188,6 +188,19 @@ The yellow line is the axis being calibrated; the bar shows the phases (grey: st
 blue: turn, green: hold) and the zigzags mark the vibrations. The GIFs are rendered
 from the app's own 3D model by `tools/make_calibration_gifs.py` (needs the `[dev]` extra).
 
+### Button debounce
+
+Cheap clones' buttons bounce, notably A: one press arrives as several quick press/release
+pulses. **Debounce (ms)** on each remote's card (20 ms by default, 0–100, 0 = off) filters
+it:
+
+- A button's first change goes through at once, with no added latency.
+- Further changes of that button within the window are ignored.
+- A real change held past the window is taken on the next report.
+
+It covers every button plus Nunchuk C and Z, before anything else reads them: Xbox, DSU,
+PC, combinations and the GUI.
+
 ### Gyro noise filter
 
 Some remotes' gyros jitter at rest (readings of ±1–2 °/s with the remote still). That
@@ -221,6 +234,13 @@ the GUI:
   still goes out. A double vibration means the gyro
   bias was refreshed and the orientation recentered; a long one means it moved, so it
   was only recentered. Leave it off for games that calibrate by themselves.
+
+  **Recentering** also makes the current pitch the neutral grip: hold the remote the way
+  you naturally aim (even a bit tipped down) and that becomes level. Tilting up or down
+  is then measured from there, in the 3D view and the aim stick.
+  - Roll is left as is.
+  - In the sideways grip there is no pitch offset: there, tilting is steering.
+  - The offset is limited to ±45° and shown in the API as `pitch_offset_deg`.
 - **Sensor bar calibration** — while the IR camera sees both dots of the sensor bar and
   the remote is roughly level, their horizontal position gives the real direction to
   the screen and slowly removes the heading drift (as the Wii does). The heading then
@@ -276,6 +296,9 @@ rumble means the mode uses inputs that remote lacks (e.g. Nunchuk buttons withou
 Nunchuk), which are listed in the GUI. The Wiimote POWER button cannot be used: the
 hardware does not report it. Also `wiichinahook gamepad --mode N` or the GUI.
 
+**Mode on startup** (*Xbox controller* tab): the last active mode (default; saved
+whenever it changes, from the remote, the GUI or the tray) or a fixed mode 1–4.
+
 Mode 1 starts as the Xbox game template, mode 2 as the DSU mode (B + →), and modes 3–4
 start empty. A saved configuration from an earlier version whose mode 2 was empty
 becomes DSU automatically. The game template:
@@ -307,7 +330,7 @@ The right stick can use one of three motion sources:
   - Horizontal: the turn from where the remote pointed when the mode was activated or at
     the last quick calibration. With the sensor-bar heading correction, the bar itself
     is the centre.
-  - Vertical: the tilt against gravity, so it doesn't drift.
+  - Vertical: the tilt against gravity (from the neutral pitch of the last recalibration), so it doesn't drift.
   - Sensitivity: the degrees needed for a full deflection, set separately for each axis.
 - **MotionPlus speed:** the rotation speed, like a mouse. The stick springs back to the
   centre when the turn stops.
@@ -321,6 +344,39 @@ Requires the **ViGEmBus** driver (installed with DS4Windows/BthPS3, or by `vgame
 bundled installer). ViGEmBus is no longer maintained by its author but works on
 Windows 11. Not yet verified on hardware: the
 vertical direction of the IR right stick.
+
+## PC mode and PC Game mode (mouse and keyboard)
+
+Two modes drive Windows itself, with no virtual controller.
+
+**PC (mode 3 by default, B + ↓)**, for the desktop:
+
+- **Mouse:** moved by the gyroscope, the IR pointer, the Nunchuk stick or the D-pad.
+  Whatever moves it can't also be mapped. **A + B** together recenter the pointer.
+- **Actions:** every button, the Nunchuk stick's four directions and the shakes can send:
+  - keys and shortcuts, with any number of keys (`ctrl+9`, `ctrl+shift+esc`);
+  - mouse clicks and scroll;
+  - system keys (mute, volume, media, Start menu);
+  - open a program or web page;
+  - a **toggle** that cycles through several actions.
+- **Super shortcuts** (off by default): 2–3 inputs together run their own action, e.g.
+  1 + − → `ctrl+add+oemcomma`.
+
+**PC Game (mode 4 by default, B + ←)**, the same keyboard and mouse but only for games:
+
+- **Actions:** only keys, mouse buttons and toggles. No system keys or launchers.
+- **Mouse:** always relative (gyroscope, Nunchuk stick or D-pad), so cameras and aim work.
+  The pointer is never moved to the centre; **A + B** held pause the gyro aim so you can re-point the remote.
+- **Modifier:** it acts at once and stays held, so B can be the trigger.
+- **Default layout:** shooter-style:
+  - Nunchuk stick = WASD
+  - B = shoot, Z = aim, C = jump, A = use
+  - 1 = crouch, 2 = run (held); shaking the Nunchuk = run
+  - D-pad = R / Q / F / G
+  - Home = Esc
+  - Shaking the Wiimote = melee
+
+Details and key names: [docs/PC_MODE.md](docs/PC_MODE.md).
 
 ## Speaker (optional)
 

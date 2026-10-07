@@ -31,7 +31,11 @@ the default) or `{"type": "dsu", "name": "DSU", "nunchuk_server": true, "ir_serv
 in the config, 0 = not opened), or a PC template (`"type": "pc"`: `mouse` with `source`
 `gyro`/`ir`/`nc_stick`/`wm_dpad`/null and its speeds, `shake_g`, and `buttons` mapping inputs
 such as `wm_a` or `nc_up` to actions like `"keys:ctrl+9"`, `"mouse:left"`, `"system:mute"`,
-`"open:notepad"` or `"toggle:ctrl+c | ctrl+v"`; see [PC_MODE.md](PC_MODE.md)). An empty mode 3
+`"open:notepad"` or `"toggle:ctrl+c | ctrl+v"`; `shortcuts_enabled`, `shortcut_window_ms` and `shortcuts`
+(`[{"inputs": ["wm_1", "wm_minus"], "action": "keys:ctrl+add+oemcomma"}]`); see [PC_MODE.md](PC_MODE.md)), or a PC Game
+template (`"type": "pc_game"`: the same fields, but only `keys`/`mouse`/`toggle` actions, no `ir`
+mouse source, `recenter_on_calibration` always false and `modifier_on_release` false by default).
+An empty mode 4 in a configuration older than `"version": 5` becomes PC Game. An empty mode 3
 in a configuration older than `"version": 4` becomes the PC mode. DSU clients receive input only while a
 DSU mode is active; in the other modes the slots stay connected with neutral data (10 packets per second instead of every report). A
 configuration without `"version": 2` whose mode 2 is empty gets the DSU mode there.
@@ -58,7 +62,7 @@ sound cuts the one playing. `speaker_config` (`{"config": {...}}`) replaces the 
 sounds (`enabled`, `volume`, `events`); see [SPEAKER.md](SPEAKER.md).
 
 `slot_options` (`quick_calibration`, `combo` — `minus+plus`, `down`, `one+two`, `a+b`, `home`,
-`minus+home+plus` —, `combo_hold_ms` 200–3000, `combo_window_ms` 0–1000, `ir_calibration`) changes a slot's quick/sensor-bar
+`minus+home+plus` —, `combo_hold_ms` 200–3000, `combo_window_ms` 0–1000, `debounce_ms` 0–100, `ir_calibration`) changes a slot's quick/sensor-bar
 calibration options live (only the
 given fields; the reply has all of them) and `quick_calibrate` runs the same quick
 calibration as the button combination (reply `{"bias_updated": true|false}`).

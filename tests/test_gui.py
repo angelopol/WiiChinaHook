@@ -278,3 +278,85 @@ def test_home_modifier_is_not_offered_with_a_dolphinbar():
     assert "wm_home" not in bar.modifiers() and "wm_a+wm_b" in bar.modifiers()
     bt = GamepadTab(SimpleNamespace(t=Translator("en"), config=replace(AppConfig(), mode="bluetooth"), page=None))
     assert "wm_home" in bt.modifiers()
+
+
+def test_pc_editor_super_shortcuts_round_trip():
+    pytest.importorskip("flet")
+    from types import SimpleNamespace
+    from wiichinahook.gamepad.mapping import validate_template
+    from wiichinahook.gui.gamepad_tab import GamepadTab
+    tab = GamepadTab(SimpleNamespace(t=Translator("es"), config=AppConfig(), page=None))
+    tab.editing = 3
+    tab.build()
+    editor = tab.pc_editor
+    assert editor.shortcuts_enabled.value is False and len(editor.shortcut_rows) == 8
+    row = editor.shortcut_rows[0]
+    row.inputs[0].value, row.inputs[1].value = "wm_1", "wm_minus"
+    row.action_row.kind.value, row.action_row.text.value = "keys", "ctrl+add+oemcomma"
+    editor.shortcuts_enabled.value = True
+    result = validate_template(tab.collect())
+    assert result["shortcuts_enabled"] is True
+    assert result["shortcuts"] == [{"inputs": ["wm_1", "wm_minus"], "action": "keys:ctrl+add+oemcomma"}]
+
+
+def test_flet_key_names_map_to_our_keys():
+    pytest.importorskip("flet")
+    from wiichinahook.gui.pc_editor import flet_key
+    cases = {"A": "a", "Key A": "a", "7": "7", "Digit 7": "7", "F5": "f5", "Enter": "enter",
+             "Numpad Enter": "num_enter", "Numpad Add": "num_add", "Numpad 3": "num3", ",": ",",
+             "Comma": ",", "Arrow Down": "down", "Control Left": "ctrl", "Control Right": "rctrl",
+             "Shift Left": "shift", "Alt Right": "ralt", "Meta Left": "win", "Escape": "esc",
+             "Page Up": "pageup", "Backslash": "\\", " ": "space", "Space": "space"}
+    for flutter, ours in cases.items():
+        assert flet_key(flutter) == ours, flutter
+    assert flet_key("Launch Mail") is None and flet_key("") is None
+
+
+def test_key_capture_builds_combinations_and_enter_accepts(monkeypatch):
+    pytest.importorskip("flet")
+    from types import SimpleNamespace
+    from wiichinahook.gui import pc_editor
+    from wiichinahook.gui.pc_editor import KeyCapture, dispatch_key
+    monkeypatch.setattr(pc_editor, "held_modifiers", lambda: None)   # the event flags (no real keyboard)
+    field = SimpleNamespace(value="old", set_keys=lambda text: setattr(field, "value", text))
+    capture = KeyCapture()
+    key = lambda k, **flags: dispatch_key(SimpleNamespace(**{"key": k, "ctrl": False, "shift": False, "alt": False,
+                                                             "meta": False, **flags}))
+    capture.start(field)
+    key("Control Left", ctrl=True)
+    assert field.value == "ctrl"                          # the first key replaces the old value
+    key("Numpad Add", ctrl=True)
+    key(",", ctrl=True)
+    assert field.value == "ctrl+num_add+,"                # each key adds to the combination
+    key("Enter")
+    assert field.value == "ctrl+num_add+,"                # Enter accepts, it is not added
+    key("F5")
+    assert field.value == "f5"                            # after accepting, a new combination
+    key("Enter")
+    key("Enter")
+    assert field.value == "enter"                         # Enter alone is the Enter key
+    key("S", ctrl=True)                                   # Ctrl only as a flag still counts
+    assert field.value == "ctrl+s"
+    capture.stop(field)
+    key("Q")
+    assert field.value == "ctrl+s"                        # not recording once the field loses focus
+
+
+def test_key_capture_asks_windows_for_alt(monkeypatch):
+    """Ctrl + Alt (AltGr on Spanish layouts): Flutter sends neither the Alt key nor its
+    flag, so the held modifiers come from Windows."""
+    pytest.importorskip("flet")
+    from types import SimpleNamespace
+    from wiichinahook.gui import pc_editor
+    field = SimpleNamespace(value="", set_keys=lambda text: setattr(field, "value", text))
+    capture = pc_editor.KeyCapture()
+    capture.start(field)
+    held = {"ctrl"}
+    monkeypatch.setattr(pc_editor, "held_modifiers", lambda: set(held))
+    event = lambda k: SimpleNamespace(key=k, ctrl=True, shift=False, alt=False, meta=False)
+    pc_editor.dispatch_key(event("Control Left"))
+    held.add("alt")                                       # Alt pressed: no event from Flutter
+    pc_editor.dispatch_key(event("P"))
+    assert field.value == "ctrl+alt+p"
+    capture.stop(field)
+

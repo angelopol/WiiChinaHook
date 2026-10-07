@@ -37,9 +37,19 @@ MOUSE_ACTIONS = (*MOUSE_BUTTONS, "scroll_up", "scroll_down")
 SYSTEM_ACTIONS = ("mute", "volume_up", "volume_down", "next_track", "previous_track", "play_pause", "stop",
                   "start_menu")
 ACTION_TYPES = ("keys", "mouse", "system", "open", "toggle")
+# PC Game: keyboard and mouse for games. Only game inputs (no system keys or launchers,
+# which pull you out of a game), and a relative mouse (games read relative motion:
+# no absolute IR pointer, no warping the pointer to the centre).
+PC_TYPES = ("pc", "pc_game")
+GAME_ACTION_TYPES = ("keys", "mouse", "toggle")
+GAME_MOUSE_SOURCES = ("gyro", "nc_stick", "wm_dpad")
 STICK_THRESHOLD = 0.5          # Nunchuk stick deflection that counts as a direction press
 MODIFIER_WINDOW = 0.06         # s the members of a two-button modifier wait for each other
 SCROLL_DELAY, SCROLL_REPEAT = 0.4, 0.08
+SHAKE_SETTLE = 0.3             # s the gyro mouse stays frozen after a Wiimote shake
+MAX_SHORTCUTS = 16
+AB_ACTIONS = ("center", "regrip", None)
+AB = ("wm_a", "wm_b")
 
 # Key name -> (virtual-key code, extended). Letters, digits and F-keys are added below.
 KEYS = {
@@ -65,7 +75,11 @@ ALIASES = {"control": "ctrl", "lctrl": "ctrl", "lshift": "shift", "lalt": "alt",
            "pgup": "pageup", "pgdn": "pagedown", "apps": "menu", "prtsc": "printscreen", "minus": "-",
            "equals": "=", "comma": ",", "period": ".", "slash": "/", "backslash": "\\", "semicolon": ";",
            "quote": "'", "backquote": "`", "spacebar": "space", "bksp": "backspace", "caps": "capslock",
-           "arrowup": "up", "arrowdown": "down", "arrowleft": "left", "arrowright": "right"}
+           "arrowup": "up", "arrowdown": "down", "arrowleft": "left", "arrowright": "right",
+           # Windows virtual-key names (VK_ADD, VK_OEM_COMMA, ...), with or without "_".
+           "add": "num_add", "subtract": "num_subtract", "multiply": "num_multiply", "divide": "num_divide",
+           "decimal": "num_decimal", "oemcomma": ",", "oemperiod": ".", "oemplus": "=", "oemminus": "-",
+           "oem1": ";", "oem2": "/", "oem3": "`", "oem4": "[", "oem5": "\\", "oem6": "]", "oem7": "'"}
 # system:* -> media virtual key (sent without scan code); start_menu taps the Windows key.
 SYSTEM_VK = {"mute": 0xAD, "volume_down": 0xAE, "volume_up": 0xAF, "next_track": 0xB0, "previous_track": 0xB1,
              "stop": 0xB2, "play_pause": 0xB3}
@@ -84,8 +98,25 @@ PC_TEMPLATE = {
         # Gyro mouse: the quick calibration also puts the pointer in the centre of the
         # screen (the remote is recentred at the same time, so both line up again).
         "recenter_on_calibration": True,
+        # Gyro mouse: a Wiimote shake (e.g. a melee swing) would spin the aim. Ignore the
+        # gyro while it shakes and SHAKE_SETTLE after, and any turn faster than
+        # freeze_dps (aiming never gets there), so the aim stays where it was.
+        "freeze_on_shake": True,
+        "freeze_dps": 300.0,
+        # A + B pressed together: "center" = pointer to the centre of the screen;
+        # "regrip" = the gyro does not move the mouse while A + B are held (re-point the
+        # remote, like lifting a mouse); None = off. A and B alone act as mapped.
+        "ab_action": "center",
     },
     "shake_g": 1.3,
+    # Super shortcuts: 2-3 inputs held together -> one action, e.g.
+    # {"inputs": ["wm_1", "wm_minus"], "action": "keys:ctrl+add+oemcomma"}. Off by default.
+    "shortcuts_enabled": False,
+    "shortcut_window_ms": 50,  # a shortcut's buttons wait this long for the rest
+    "shortcuts": [],
+    # The mode modifier's action fires on release (modifier + arrow switches mode
+    # without clicking). PC Game turns this off: there B is the trigger and must hold.
+    "modifier_on_release": True,
     "buttons": {
         "wm_a": "mouse:left", "wm_b": "mouse:right",
         "wm_up": "keys:up", "wm_down": "keys:down", "wm_left": "keys:left", "wm_right": "keys:right",
@@ -96,7 +127,34 @@ PC_TEMPLATE = {
         "nc_right": "keys:alt+right",
     },
 }
-MOUSE_LIMITS = {"gyro_speed": (1, 400), "gyro_deadzone": (0, 30), "stick_speed": (50, 10000),
+PC_GAME_TEMPLATE = {
+    "type": "pc_game",
+    "name": "PC Game",
+    # In a game, warping the pointer jerks the camera: A + B pauses the gyro aim instead.
+    "mouse": dict(PC_TEMPLATE["mouse"], source="gyro", recenter_on_calibration=False, ab_action="regrip"),
+    "shake_g": 1.3,
+    "shortcuts_enabled": False,
+    "shortcut_window_ms": 50,
+    "shortcuts": [],
+    "modifier_on_release": False,
+    # A shooter-style layout: move with the Nunchuk stick, aim with the gyro.
+    "buttons": {
+        "nc_up": "keys:w", "nc_down": "keys:s", "nc_left": "keys:a", "nc_right": "keys:d",
+        "wm_b": "mouse:left",          # trigger = shoot
+        "nc_z": "mouse:right",         # aim
+        "nc_c": "keys:space",          # jump
+        "wm_a": "keys:e",              # use / interact
+        "wm_1": "keys:ctrl",           # crouch
+        "wm_2": "keys:shift",          # run (held)
+        # Run by shaking the Nunchuk: a short Shift press (set sprint to "toggle" in the game).
+        "nc_shake_x": "keys:shift", "nc_shake_y": "keys:shift", "nc_shake_z": "keys:shift",
+        "wm_up": "keys:r", "wm_down": "keys:q", "wm_left": "keys:f", "wm_right": "keys:g",
+        "wm_plus": "keys:m", "wm_minus": "keys:tab", "wm_home": "keys:esc",
+        "wm_shake_x": "keys:v", "wm_shake_y": "keys:v", "wm_shake_z": "keys:v",   # melee
+    },
+}
+
+MOUSE_LIMITS = {"freeze_dps": (100, 2000), "gyro_speed": (1, 400), "gyro_deadzone": (0, 30), "stick_speed": (50, 10000),
                 "stick_deadzone": (0, 0.9), "ir_range": (0.05, 1.0), "ir_smoothing": (0, 0.95)}
 
 
@@ -105,7 +163,7 @@ def key_codes(text):
     names = [part.strip().lower() for part in text.split("+")]
     if not names or any(not n for n in names):
         raise ValueError(f"Invalid key combination: {text!r}")
-    names = [ALIASES.get(n, n) for n in names]
+    names = [n if n in KEYS else ALIASES.get(n, ALIASES.get(n.replace("_", ""), n)) for n in names]
     unknown = [n for n in names if n not in KEYS]
     if unknown:
         raise ValueError(f"Unknown key: {unknown[0]!r}")
@@ -158,24 +216,37 @@ def normalize_action(text):
 
 
 def validate_pc_template(template: dict) -> dict:
-    result = copy.deepcopy(PC_TEMPLATE)
-    result["name"] = str(template.get("name") or "PC")[:40]
+    game = template.get("type") == "pc_game"
+    base = PC_GAME_TEMPLATE if game else PC_TEMPLATE
+    sources = GAME_MOUSE_SOURCES if game else MOUSE_SOURCES
+    kinds = GAME_ACTION_TYPES if game else ACTION_TYPES
+    result = copy.deepcopy(base)
+    result["name"] = str(template.get("name") or base["name"])[:40]
     mouse = dict(result["mouse"], **(template.get("mouse") or {}))
-    if mouse["source"] is not None and mouse["source"] not in MOUSE_SOURCES:
-        raise ValueError(f"mouse source must be one of {', '.join(MOUSE_SOURCES)} or null")
+    if mouse["source"] is not None and mouse["source"] not in sources:
+        raise ValueError(f"mouse source must be one of {', '.join(sources)} or null")
     for key, (low, high) in MOUSE_LIMITS.items():
         value = mouse[key]
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not low <= value <= high:
             raise ValueError(f"mouse {key} must be {low}..{high}")
         mouse[key] = float(value)
-    if not isinstance(mouse["recenter_on_calibration"], bool):
-        raise ValueError("mouse recenter_on_calibration must be true or false")
+    for key in ("recenter_on_calibration", "freeze_on_shake"):
+        if not isinstance(mouse[key], bool):
+            raise ValueError(f"mouse {key} must be true or false")
+    if mouse["ab_action"] not in AB_ACTIONS:
+        raise ValueError("mouse ab_action must be center, regrip or null")
+    if game:
+        mouse["recenter_on_calibration"] = False      # warping the pointer jerks a game camera
+    on_release = template.get("modifier_on_release", base["modifier_on_release"])
+    if not isinstance(on_release, bool):
+        raise ValueError("modifier_on_release must be true or false")
+    result["modifier_on_release"] = on_release
     result["mouse"] = {k: mouse[k] for k in PC_TEMPLATE["mouse"]}
     shake = template.get("shake_g", PC_TEMPLATE["shake_g"])
     if isinstance(shake, bool) or not isinstance(shake, (int, float)) or not 0.2 <= shake <= 6:
         raise ValueError("shake_g must be 0.2..6")
     result["shake_g"] = float(shake)
-    buttons = template.get("buttons", PC_TEMPLATE["buttons"])
+    buttons = template.get("buttons", base["buttons"])
     unknown = set(buttons) - set(PC_SOURCES)
     if unknown:
         raise ValueError(f"Unknown input: {', '.join(sorted(unknown))}")
@@ -188,11 +259,46 @@ def validate_pc_template(template: dict) -> dict:
             continue
         if source in claimed:
             raise ValueError(f"{source} drives the mouse and cannot also be mapped")
-        try:
-            result["buttons"][source] = normalize_action(action)
-        except ValueError as exc:
-            raise ValueError(f"{source}: {exc}") from None
+        result["buttons"][source] = checked_action(source, action, kinds)
+    enabled = template.get("shortcuts_enabled", False)
+    window = template.get("shortcut_window_ms", 50)
+    if not isinstance(enabled, bool):
+        raise ValueError("shortcuts_enabled must be true or false")
+    if isinstance(window, bool) or not isinstance(window, (int, float)) or not 0 <= window <= 300:
+        raise ValueError("shortcut_window_ms must be 0..300")
+    shortcuts = template.get("shortcuts", [])
+    if not isinstance(shortcuts, list) or len(shortcuts) > MAX_SHORTCUTS:
+        raise ValueError(f"shortcuts must be a list of at most {MAX_SHORTCUTS}")
+    result["shortcuts_enabled"], result["shortcut_window_ms"] = enabled, int(window)
+    result["shortcuts"] = []
+    for number, shortcut in enumerate(shortcuts, 1):
+        inputs = shortcut.get("inputs") if isinstance(shortcut, dict) else None
+        if isinstance(inputs, str):
+            inputs = inputs.split("+")
+        name = f"shortcut {number}"
+        if not isinstance(inputs, list) or not 2 <= len(inputs) <= 3 or len(set(inputs)) != len(inputs):
+            raise ValueError(f"{name}: needs 2 or 3 different inputs")
+        unknown = [i for i in inputs if i not in PC_SOURCES]
+        if unknown:
+            raise ValueError(f"{name}: unknown input {unknown[0]}")
+        if set(inputs) & claimed:
+            raise ValueError(f"{name}: {sorted(set(inputs) & claimed)[0]} drives the mouse")
+        result["shortcuts"].append({"inputs": list(inputs),
+                                    "action": checked_action(name, shortcut.get("action"), kinds)})
     return result
+
+
+def checked_action(where, action, kinds):
+    """Normalized action, refusing kinds this mode does not offer (PC Game)."""
+    try:
+        normalized = normalize_action(action)
+        kind, value = parse_action(action)
+        used = [k for k, _ in value] if kind == "toggle" else [kind]
+        if any(k not in kinds for k in used):
+            raise ValueError(f"PC Game only maps {', '.join(GAME_ACTION_TYPES)} (no system keys or launchers)")
+        return normalized
+    except ValueError as exc:
+        raise ValueError(f"{where}: {exc}") from None
 
 
 def pc_problems(template, capabilities):
@@ -222,13 +328,17 @@ class PcEngine:
         self.toggles = {}            # input -> next step index
         self.scroll = {}             # input -> (delta, next repeat time)
         self.deferred = set()        # the modifier: its action fires on release
-        self.pending = {}            # members of a two-button modifier waiting for each other
+        self.pending = {}            # input -> (since, wait): may still start a shortcut/gesture
+        self.shortcut_held = {}      # "shortcutN" -> its inputs, while held
         self.wm_shake, self.nc_shake = ShakeDetector(), ShakeDetector()
         self.last_t = None
         self.carry = [0.0, 0.0]      # sub-pixel remainders of relative motion
         self.dpad_since = None
         self.ir_pos = None
         self.recenter_seq = self.UNSEEN   # last quick calibration seen (recenter_seq)
+        self.frozen_until = 0.0           # gyro mouse frozen until then (Wiimote shake)
+        self.ab_done = False              # this A + B press already recentred
+        self.ab_held = False              # A + B held right now (regrip)
 
     # -- inputs -----------------------------------------------------------------
     def inputs(self, state, pressed, template, t):
@@ -241,8 +351,10 @@ class PcEngine:
                 if on:
                     active.add(name)
         thresholds = [template["shake_g"]] * len(SHAKE_AXES)
-        active |= {f"wm_shake_{a}" for a in self.wm_shake.update(state.get("accel_g"), t, thresholds)
-                   if a in SHAKE_AXES}
+        shaking = self.wm_shake.update(state.get("accel_g"), t, thresholds)
+        if shaking:
+            self.frozen_until = t + SHAKE_SETTLE
+        active |= {f"wm_shake_{a}" for a in shaking if a in SHAKE_AXES}
         raw = (state.get("nunchuk") or {}).get("accel_raw")
         nc = [(v - 512) / 200.0 for v in raw] if raw else None
         active |= {f"nc_shake_{a}" for a in self.nc_shake.update(nc, t, thresholds) if a in SHAKE_AXES}
@@ -253,32 +365,67 @@ class PcEngine:
         active = self.inputs(state, pressed, template, t)
         if self.ignored is None:
             self.ignored = set(active)            # e.g. B + ↓ that just selected this mode
+        held = set(active)                        # everything physically held now
         self.ignored &= active
         claimed = set(MOUSE_CLAIMS.get(template["mouse"]["source"], ()))
         active -= self.ignored | claimed
         actions = template["buttons"]
-        members = modifier.split("+") if "+" in modifier else []
-        if members and all(m in active for m in members):      # the A + B gesture: no clicks
-            self.ignored |= set(members)
-            active -= set(members)
-            for m in members:
-                self.pending.pop(m, None)
-        for source, since in list(self.pending.items()):      # the partner did not come
+        on_release = template.get("modifier_on_release", True)
+
+        # Super shortcuts (longest first): the action is held while every member is;
+        # its members do nothing else until released.
+        shortcuts = template.get("shortcuts", []) if template.get("shortcuts_enabled") else []
+        for key, members in list(self.shortcut_held.items()):
+            if not members <= held:
+                del self.shortcut_held[key]
+                self.release(key)
+        for index, shortcut in sorted(enumerate(shortcuts), key=lambda item: -len(item[1]["inputs"])):
+            key, members = f"shortcut{index}", set(shortcut["inputs"])
+            if key not in self.shortcut_held and members <= active:
+                self.consume(members)
+                active -= members
+                self.shortcut_held[key] = members
+                self.press(key, shortcut["action"], t)
+        shortcut_members = {m for shortcut in shortcuts for m in shortcut["inputs"]}
+        shortcut_wait = template.get("shortcut_window_ms", 50) / 1000
+
+        # Two-button gestures: a two-button mode modifier and the A + B mouse action.
+        # Their members wait MODIFIER_WINDOW for each other; together they click nothing.
+        ab_action = template["mouse"]["ab_action"]
+        gestures = [tuple(modifier.split("+"))] if "+" in modifier else []
+        if ab_action:
+            gestures.append(AB)
+        members = {m for gesture in gestures for m in gesture}
+        for gesture in gestures:
+            if all(m in active for m in gesture):
+                self.consume(set(gesture))
+                active -= set(gesture)
+                if gesture == AB and ab_action == "center" and not self.ab_done:
+                    self.ab_done = True
+                    self.center()
+        self.ab_held = all(m in pressed for m in AB)
+        if not self.ab_held:
+            self.ab_done = False
+        for source, (since, wait) in list(self.pending.items()):   # the partners did not come
             if source not in active:
                 del self.pending[source]
                 self.press(source, actions[source], t)         # a quick tap still acts
                 self.release(source)
-            elif t - since >= MODIFIER_WINDOW:
+            elif t - since >= wait:
                 del self.pending[source]
                 self.press(source, actions[source], t)
         for source in sorted(active - self.down):             # newly pressed
             action = actions.get(source)
             if not action:
                 continue
-            if source == modifier:
+            if source == modifier and on_release:
                 self.deferred.add(source)
-            elif source in members:
-                self.pending[source] = t
+            elif source in shortcut_members:
+                self.pending[source] = (t, shortcut_wait)      # may start a super shortcut
+            elif source in members and source != modifier:
+                self.pending[source] = (t, MODIFIER_WINDOW)    # may become a gesture
+            elif source in members and not on_release and len(modifier.split("+")) > 1:
+                self.pending[source] = (t, MODIFIER_WINDOW)
             else:
                 self.press(source, action, t)
         for source in sorted(self.down - active):             # released
@@ -295,6 +442,13 @@ class PcEngine:
                 self.output.wheel(delta)
                 self.scroll[source] = (delta, t + SCROLL_REPEAT)
         self.move(state, pressed, template, t)
+
+    def consume(self, members):
+        """Inputs used by a shortcut or gesture: no individual action until released."""
+        self.ignored |= members
+        for m in members:
+            self.pending.pop(m, None)
+            self.deferred.discard(m)
 
     def press(self, source, action, t):
         kind, value = parse_action(action)
@@ -334,12 +488,18 @@ class PcEngine:
         else:
             self.output.button(value, False)
 
+    def center(self):
+        """Pointer to the centre of the monitor it is on (A + B, recalibration)."""
+        self.carry = [0.0, 0.0]
+        self.output.center()
+
     def release_all(self):
         """Mode change or disconnection: nothing may stay pressed."""
         for source in list(self.held):
             self.release(source)
         self.scroll.clear()
         self.deferred.clear()
+        self.shortcut_held.clear()
         self.down = set()
 
     # -- mouse ------------------------------------------------------------------
@@ -352,8 +512,7 @@ class PcEngine:
         elif seq != self.recenter_seq:                   # a quick calibration happened
             self.recenter_seq = seq
             if source == "gyro" and mouse["recenter_on_calibration"]:
-                self.carry = [0.0, 0.0]
-                self.output.move_abs(0.5, 0.5)           # pointer back to the centre
+                self.center()                            # pointer back to the centre
                 self.last_t = t
                 return
         dt = 0.0 if self.last_t is None else max(0.0, min(0.05, t - self.last_t))
@@ -370,8 +529,17 @@ class PcEngine:
             self.output.move_abs(*target)
             return
         dx = dy = 0.0
+        if source == "gyro" and self.ab_held and mouse["ab_action"] == "regrip":
+            self.carry = [0.0, 0.0]
+            return                                       # re-gripping: the aim waits
         if source == "gyro" and state.get("gyro_dps"):
             yaw, _roll, pitch = state["gyro_dps"]
+            if mouse["freeze_on_shake"] and (t < self.frozen_until or
+                                             max(abs(yaw), abs(pitch)) > mouse["freeze_dps"]):
+                self.carry = [0.0, 0.0]
+                if max(abs(yaw), abs(pitch)) > mouse["freeze_dps"]:
+                    self.frozen_until = max(self.frozen_until, t + SHAKE_SETTLE)
+                return                                   # a swing, not aiming: keep the aim
             soft = lambda v: math.copysign(max(0.0, abs(v) - mouse["gyro_deadzone"]), v)
             # Turning right (yaw -) moves right; tip up (pitch -) moves up (screen y down).
             dx, dy = -soft(yaw) * mouse["gyro_speed"] * dt, soft(pitch) * mouse["gyro_speed"] * dt

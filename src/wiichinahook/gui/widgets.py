@@ -38,5 +38,9 @@ def columns(left, right, spacing=16):
 
 
 def number(label, value, width=None, suffix=None, tooltip=None):
-    return ft.TextField(label=label, value=str(value), dense=True, width=width, expand=width is None,
-                        suffix=suffix, tooltip=tooltip, keyboard_type=ft.KeyboardType.NUMBER)
+    """A numeric field: fixed `width`, or expanding in its row when width is None.
+    Never pass expand=False: Flet then makes it a flexible child, which breaks inside
+    a wrapping row (the grey error box)."""
+    extra = {"width": width} if width is not None else {"expand": True}
+    return ft.TextField(label=label, value=str(value), dense=True, suffix=suffix, tooltip=tooltip,
+                        keyboard_type=ft.KeyboardType.NUMBER, **extra)

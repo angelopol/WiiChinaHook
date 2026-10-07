@@ -22,7 +22,7 @@ import math
 from ..orientation import heading, rotate
 from .inputs import (AXIS_GESTURES, BUTTON_SOURCES, DIRECTIONS, GESTURE_SOURCES, SHAKE_AXES,  # noqa: F401
                      ShakeDetector, ir_pointer, ir_stick)
-from .pc import PC_TEMPLATE, pc_problems, validate_pc_template
+from .pc import PC_GAME_TEMPLATE, PC_TEMPLATE, PC_TYPES, pc_problems, validate_pc_template
 
 
 # gyro_angle: the remote's aim (orientation), so the stick holds where it points;
@@ -73,7 +73,7 @@ GAME_TEMPLATE = {
 # The extra DSU servers (dsu.py) carry what one DSU slot cannot: the Nunchuk's
 # accelerometer and the IR pointer. On by default; off = their slots disconnected.
 DSU_TEMPLATE = {"type": "dsu", "name": "DSU", "nunchuk_server": True, "ir_server": True, "ir_range": 0.5}
-CONFIG_VERSION = 4
+CONFIG_VERSION = 5
 
 
 def mode_type(template):
@@ -104,10 +104,10 @@ def validate_template(template: dict) -> dict:
             raise ValueError("ir_range must be 0.05..1")
         result["ir_range"] = ir_range
         return result
-    if kind == "pc":
+    if kind in PC_TYPES:
         return validate_pc_template(template)
     if kind != "xbox":
-        raise ValueError("Mode type must be xbox, dsu or pc")
+        raise ValueError("Mode type must be xbox, dsu, pc or pc_game")
     result = copy.deepcopy(GAME_TEMPLATE)
     if "shake_g" in template:  # configs from before per-axis sensitivity
         result["shake_wm"] = result["shake_nc"] = [template["shake_g"]] * 3
@@ -171,6 +171,8 @@ def validate_config(config: dict | None) -> dict:
         modes[1] = copy.deepcopy(DSU_TEMPLATE)   # mode 2 became the DSU mode
     if version < 4 and modes[2] is None and "pc" not in map(mode_type, modes):
         modes[2] = copy.deepcopy(PC_TEMPLATE)    # mode 3 became the PC mode
+    if version < 5 and modes[3] is None and "pc_game" not in map(mode_type, modes):
+        modes[3] = copy.deepcopy(PC_GAME_TEMPLATE)   # mode 4 became the PC Game mode
     if version < 3:
         # The rate-based "gyro" stick sprang back to centre when the turn stopped; the
         # aim-based one holds the position, which is what a "gyro stick" was meant to be.
@@ -200,7 +202,7 @@ def required_capability(source):
 
 def unavailable_bindings(template: dict | None, capabilities: dict) -> list[str]:
     """'TARGET: source (needs capability)' for bindings this remote cannot drive."""
-    if mode_type(template) == "pc":
+    if mode_type(template) in PC_TYPES:
         return pc_problems(template, capabilities)
     if mode_type(template) != "xbox":
         return []
@@ -398,7 +400,8 @@ class MappingEngine:
 
 
 # startup_mode: the mode the service starts in (1-4), or None for the last active one.
-# Mode 1 = Xbox game template, 2 = DSU (Dolphin/Cemu), 3 = PC (mouse and keyboard).
+# Mode 1 = Xbox game template, 2 = DSU (Dolphin/Cemu), 3 = PC (mouse and keyboard),
+# 4 = PC Game (keyboard and mouse for games).
 DEFAULT_CONFIG = {"version": CONFIG_VERSION, "modifier": "wm_b", "mode": 1, "startup_mode": None,
                   "modes": [copy.deepcopy(GAME_TEMPLATE), copy.deepcopy(DSU_TEMPLATE),
-                            copy.deepcopy(PC_TEMPLATE), None]}
+                            copy.deepcopy(PC_TEMPLATE), copy.deepcopy(PC_GAME_TEMPLATE)]}

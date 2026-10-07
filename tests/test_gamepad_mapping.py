@@ -147,7 +147,8 @@ def test_config_validation_and_free_remapping():
                                          "sticks": {"RIGHT_STICK": "ir"}}]})
     assert config["modes"][0]["buttons"]["A"] == "wm_a"
     assert config["modes"][0]["buttons"]["X"] is None            # unspecified = unassigned
-    assert config["modes"][0]["sticks"]["RIGHT_STICK"] == "ir" and config["modes"][3] is None
+    assert config["modes"][0]["sticks"]["RIGHT_STICK"] == "ir"
+    assert mode_type(config["modes"][3]) == "pc_game"              # old configs: empty mode 4 becomes PC Game
     assert mode_type(config["modes"][2]) == "pc"                   # old configs: empty mode 3 becomes PC
     assert config["modes"][1] == DSU_TEMPLATE   # old configs: empty mode 2 becomes DSU (extra servers on)
     for bad in ({"modifier": "wm_power"}, {"mode": 5}, {"modes": [{"buttons": {"Z": "wm_a"}}]},
@@ -222,10 +223,10 @@ def test_old_single_shake_threshold_still_loads():
 
 def test_dsu_mode_type_and_migration():
     assert DEFAULT_CONFIG["modes"][1]["type"] == "dsu" and mode_type(DEFAULT_CONFIG["modes"][0]) == "xbox"
-    current = validate_config({"version": 2, "modes": [None, None, {"type": "dsu"}, None]})
+    current = validate_config({"version": 5, "modes": [None, None, {"type": "dsu"}, None]})
     assert [mode_type(t) for t in current["modes"]] == [None, None, "dsu", None]   # no re-migration
     legacy = validate_config({"modes": [None, {"buttons": {"A": "wm_a"}}, None, None]})
-    assert [mode_type(t) for t in legacy["modes"]] == [None, "xbox", "pc", None]   # mode 2 in use: kept
+    assert [mode_type(t) for t in legacy["modes"]] == [None, "xbox", "pc", "pc_game"]   # mode 2 in use: kept
     assert unavailable_bindings({"type": "dsu", "name": "DSU"}, {}) == []
     with pytest.raises(ValueError):
         validate_template({"type": "keyboard"})

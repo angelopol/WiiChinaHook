@@ -176,7 +176,7 @@ class GamepadHub:
         if request is not None and request != self.mode:
             self.set_mode(request)
             return
-        if self.mode_type == "pc":
+        if self.mode_type in ("pc", "pc_game"):
             self.report_output(slot, None)
             self.update_pc(slot, snapshot, engine, state)
             return

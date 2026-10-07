@@ -173,6 +173,9 @@ TEXT = {
         "combo_hold_ms": "Hold (ms)",
         "combo_hold_hint": "How long the combination must be held to recalibrate (200–3000 ms)",
         "combo_window_ms": "Window (ms)",
+        "debounce_ms": "Debounce (ms)",
+        "debounce_hint": "Switch-bounce filter: after a button changes, further changes of it within this time "
+                         "are ignored, so a cheap clone's bouncing A button cannot double-press. 0 = off (0–100 ms)",
         "combo_window_hint": "Combination window: Home, + or − pressed alone do nothing for this long (or "
                              "until the combination is complete), so the game never sees them (0–1000 ms)",
         "combo_minus_home_plus": "− + Home + +",
@@ -208,6 +211,13 @@ TEXT = {
         "gp_cat_combos": "Combinations",
         "gp_chord_window_ms": "Combination window (ms, 0–300)",
         "gp_type_pc": "PC (mouse and keyboard)",
+        "gp_type_pc_game": "PC Game (keyboard and mouse for games)",
+        "pc_game_mouse_hint": "Games read relative mouse motion: aim with the gyroscope (or the Nunchuk stick / "
+                              "D-pad). The IR pointer and moving the pointer to the centre are not available "
+                              "here, they would jerk the camera. Whatever moves the mouse cannot also be mapped.",
+        "pc_game_modifier_hint": "Only game inputs here: keys, mouse buttons and toggles. The mode modifier (B) "
+                                 "acts at once and stays held, so it can be the trigger; modifier + arrow still "
+                                 "switches mode.",
         "gp_view_pc": "PC mode: the remotes drive the mouse and keyboard, no virtual Xbox controller.",
         "pc_reset": "PC defaults",
         "pc_claimed": "used by the mouse",
@@ -218,6 +228,9 @@ TEXT = {
         "pc_kind_open": "Open",
         "pc_kind_toggle": "Toggle",
         "pc_hint_keys": "e.g. ctrl+9 or ctrl+shift+esc",
+        "pc_hint_record": "Click and press the keys; Enter accepts",
+        "pc_keys_clear": "Clear",
+        "pc_keys_edit": "Type the keys instead (for Win, Print Screen…)",
         "pc_hint_open": "program, file or https:// address",
         "pc_hint_toggle": "steps separated by |, e.g. ctrl+c | ctrl+v | system:mute",
         "pc_mouse_left": "Left click",
@@ -252,8 +265,25 @@ TEXT = {
         "pc_ir_smoothing": "IR smoothing (0–0.95)",
         "pc_shake_g": "Shake strength",
         "pc_recenter_on_calibration": "Recenter the mouse when recalibrating",
+        "pc_freeze_on_shake": "Freeze the gyro mouse when shaking",
+        "pc_ab_action": "A + B together",
+        "pc_shortcuts": "Super shortcuts",
+        "pc_shortcuts_enabled": "Use super shortcuts",
+        "pc_shortcut_window_ms": "Shortcut window (ms, 0–300)",
+        "pc_shortcuts_hint": "Two or three inputs held together run their own action, e.g. 1 + − → "
+                             "ctrl+add+oemcomma. Their buttons wait the window for the rest; if the shortcut "
+                             "completes only its action runs, otherwise each acts alone. Off by default.",
+        "pc_ab_center": "Recenter the pointer",
+        "pc_ab_regrip": "Pause the gyro while held (re-grip)",
+        "pc_ab_off": "Nothing",
+        "pc_ab_hint": "Pressed together, A and B do not click: they recenter the pointer (on its monitor), or pause the gyro "
+                      "mouse while held so you can re-point the remote (best for games: moving the pointer "
+                      "jerks the camera). Alone, A and B act as mapped.",
+        "pc_freeze_hint": "A Wiimote shake (e.g. a melee hit) would spin the aim: the gyro is ignored while it "
+                          "shakes, for 0.3 s after, and for any turn faster than the limit, so the aim stays put.",
+        "pc_freeze_dps": "Ignore turns faster than (°/s)",
         "pc_recenter_hint": "Gyro mouse: the quick calibration combination also puts the pointer in the centre "
-                            "of the screen (point the remote at the centre while you recalibrate).",
+                            "of the monitor it is on (point the remote at the centre while you recalibrate).",
         "pc_mouse_hint": "Whatever moves the mouse cannot also be mapped: with the D-pad or the Nunchuk stick, "
                          "their rows below are disabled. The gyroscope moves the mouse as you turn the remote "
                          "(quick calibration removes drift); IR places it where you point; the stick and the "
@@ -527,6 +557,9 @@ TEXT = {
         "combo_hold_ms": "Mantener (ms)",
         "combo_hold_hint": "Cuánto hay que mantener la combinación para recalibrar (200–3000 ms)",
         "combo_window_ms": "Margen (ms)",
+        "debounce_ms": "Antirrebote (ms)",
+        "debounce_hint": "Filtro de rebote: tras cambiar un botón, se ignoran sus cambios durante este tiempo, así el "
+                         "botón A con rebote de un clon barato no pulsa dos veces. 0 = desactivado (0–100 ms)",
         "combo_window_hint": "Margen de combinación: Home, + o − pulsados solos no hacen nada durante este tiempo "
                              "(o hasta que la combinación esté completa), así el juego nunca los ve (0–1000 ms)",
         "combo_minus_home_plus": "− + Home + +",
@@ -563,6 +596,13 @@ TEXT = {
         "gp_cat_combos": "Combinaciones",
         "gp_chord_window_ms": "Margen de combinación (ms, 0–300)",
         "gp_type_pc": "PC (ratón y teclado)",
+        "gp_type_pc_game": "PC Game (teclado y ratón para juegos)",
+        "pc_game_mouse_hint": "Los juegos leen el movimiento relativo del ratón: apunta con el giroscopio (o el "
+                              "stick del Nunchuk / la cruceta). El puntero IR y llevar el puntero al centro no "
+                              "están aquí, moverían la cámara de golpe. Lo que mueve el ratón no se puede mapear.",
+        "pc_game_modifier_hint": "Aquí solo hay entradas de juego: teclas, botones del ratón y alternar. El "
+                                 "modificador de modo (B) actúa al momento y se mantiene, así puede ser el gatillo; "
+                                 "modificador + flecha sigue cambiando de modo.",
         "gp_view_pc": "Modo PC: los mandos manejan el ratón y el teclado, sin mando Xbox virtual.",
         "pc_reset": "Valores PC por defecto",
         "pc_claimed": "lo usa el ratón",
@@ -573,6 +613,9 @@ TEXT = {
         "pc_kind_open": "Abrir",
         "pc_kind_toggle": "Alternar",
         "pc_hint_keys": "p. ej. ctrl+9 o ctrl+shift+esc",
+        "pc_hint_record": "Haz clic y pulsa las teclas; Enter acepta",
+        "pc_keys_clear": "Borrar",
+        "pc_keys_edit": "Escribir las teclas (para Win, Impr Pant…)",
         "pc_hint_open": "programa, archivo o dirección https://",
         "pc_hint_toggle": "pasos separados por |, p. ej. ctrl+c | ctrl+v | system:mute",
         "pc_mouse_left": "Clic izquierdo",
@@ -607,8 +650,26 @@ TEXT = {
         "pc_ir_smoothing": "Suavizado IR (0–0,95)",
         "pc_shake_g": "Fuerza de sacudida",
         "pc_recenter_on_calibration": "Recentrar el ratón al recalibrar",
+        "pc_freeze_on_shake": "Congelar el ratón del giroscopio al agitar",
+        "pc_ab_action": "A + B a la vez",
+        "pc_shortcuts": "Superatajos",
+        "pc_shortcuts_enabled": "Usar superatajos",
+        "pc_shortcut_window_ms": "Margen de los atajos (ms, 0–300)",
+        "pc_shortcuts_hint": "Dos o tres entradas a la vez ejecutan su propia acción, p. ej. 1 + − → "
+                             "ctrl+add+oemcomma. Sus botones esperan el margen al resto; si el atajo se completa "
+                             "solo se ejecuta su acción, si no cada uno actúa solo. Desactivados por defecto.",
+        "pc_ab_center": "Recentrar el puntero",
+        "pc_ab_regrip": "Pausar el giroscopio mientras se mantienen",
+        "pc_ab_off": "Nada",
+        "pc_ab_hint": "Pulsados a la vez, A y B no hacen clic: recentran el puntero (en su monitor), o pausan el ratón del "
+                      "giroscopio mientras los mantienes para que vuelvas a apuntar el mando (mejor en juegos: "
+                      "mover el puntero mueve la cámara de golpe). Por separado, A y B hacen lo que tengan asignado.",
+        "pc_freeze_hint": "Agitar el Wiimote (p. ej. un golpe cuerpo a cuerpo) haría girar la mira: se ignora el "
+                          "giroscopio mientras se agita, 0,3 s después y en cualquier giro más rápido que el límite, "
+                          "así la mira se queda donde estaba.",
+        "pc_freeze_dps": "Ignorar giros de más de (°/s)",
         "pc_recenter_hint": "Ratón por giroscopio: la combinación de calibración rápida también lleva el puntero "
-                            "al centro de la pantalla (apunta el mando al centro mientras recalibras).",
+                            "al centro del monitor en el que está (apunta el mando al centro mientras recalibras).",
         "pc_mouse_hint": "Lo que mueve el ratón no se puede mapear también: con la cruceta o el stick del "
                          "Nunchuk, sus filas de abajo quedan desactivadas. El giroscopio mueve el ratón al girar "
                          "el mando (la calibración rápida elimina la deriva); el IR lo coloca donde apuntas; el "
