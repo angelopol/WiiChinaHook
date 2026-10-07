@@ -5,6 +5,7 @@ import asyncio
 import logging
 
 from .mapping import DEFAULT_CONFIG, MappingEngine, mode_type, unavailable_bindings, validate_config
+from .pc import PcEngine
 
 log = logging.getLogger(__name__)
 
@@ -70,11 +71,13 @@ class GamepadHub:
     (plus a long one if its active template uses inputs it does not have)."""
 
     def __init__(self, config=None, rumble=None, on_change=None, pad_factory=XboxPad, loop=None, blink=None,
-                 on_output=None, sound=None):
+                 on_output=None, sound=None, pc_output=None):
         self.config = validate_config(config if config is not None else DEFAULT_CONFIG)
         self.rumble = rumble              # async rumble(slot, duration_ms) or None
         self.blink = blink                # async blink(slot, led_mask): flash the mode's LED
         self.sound = sound                # sound(slot, mode): optional speaker cue
+        self.pc_output = pc_output        # keyboard/mouse injector (winput); created on first use
+        self.pc_engines = {}
         self.on_output = on_output        # called with each slot's Xbox output when it changes
         self.outputs = {}
         self.on_change = on_change        # called with status() after any change
@@ -97,6 +100,11 @@ class GamepadHub:
         return mode_type(self.config["modes"][self.mode - 1])
 
     @property
+    def current(self):
+        """The active mode's template of any type (None if empty)."""
+        return self.config["modes"][self.mode - 1]
+
+    @property
     def template(self):
         """The active Xbox template, or None in DSU/empty modes."""
         current = self.config["modes"][self.mode - 1]
@@ -105,6 +113,16 @@ class GamepadHub:
     @property
     def dsu_active(self):
         return self.mode_type == "dsu"
+
+    @property
+    def dsu_options(self):
+        """The DSU mode's options (extra servers): the active mode if it is a DSU one,
+        else the first DSU mode, so devices stay listed while another mode plays.
+        None when no mode is a DSU mode (extra servers off)."""
+        current = self.config["modes"][self.mode - 1]
+        if mode_type(current) == "dsu":
+            return current
+        return next((t for t in self.config["modes"] if mode_type(t) == "dsu"), None)
 
     def status(self):
         return {"mode": self.mode, "modifier": self.config["modifier"],
@@ -131,6 +149,7 @@ class GamepadHub:
                 self.report_output(slot, None)
                 self.connected.discard(slot)
                 self.engines.pop(slot, None)
+                self.release_pc(slot)
                 self.problems.pop(slot, None)
                 self.capabilities.pop(slot, None)
                 self.close_pad(slot)
@@ -139,7 +158,7 @@ class GamepadHub:
         self.capabilities[slot] = state.capabilities
         if slot not in self.connected:
             self.connected.add(slot)
-            self.problems[slot] = unavailable_bindings(self.template, state.capabilities)
+            self.problems[slot] = unavailable_bindings(self.current, state.capabilities)
             self.changed()
         engine = self.engines.setdefault(slot, MappingEngine())
         snapshot = {"buttons": state.buttons, "timestamp_us": state.timestamp_us, "accel_g": state.accel_g,
@@ -154,6 +173,10 @@ class GamepadHub:
             self.changed()
         if request is not None and request != self.mode:
             self.set_mode(request)
+            return
+        if self.mode_type == "pc":
+            self.report_output(slot, None)
+            self.update_pc(slot, snapshot, engine, state)
             return
         if template is None or output is None:
             self.report_output(slot, None)
@@ -175,6 +198,40 @@ class GamepadHub:
                 self.error = f"Virtual controller {slot}: {exc}"
                 log.warning(self.error)
                 self.close_pad(slot)
+
+    def update_pc(self, slot, snapshot, engine, state):
+        current = self.current
+        key = (id(current), tuple(state.capabilities.items()))
+        if self.problem_keys.get(slot) != key:
+            self.problem_keys[slot] = key
+            problems = unavailable_bindings(current, state.capabilities)
+            if problems != self.problems.get(slot):
+                self.problems[slot] = problems
+                self.changed()
+        pc = self.pc_engines.get(slot)
+        if pc is None:
+            pc = self.pc_engines[slot] = PcEngine(self.pc_injector())
+        # Mode-switch arrows (modifier + arrow) are never sent as keys.
+        pc.update(snapshot, engine.previous - engine.suppressed, current, self.config["modifier"],
+                  (snapshot["timestamp_us"] or 0) / 1e6)
+
+    def pc_injector(self):
+        if self.pc_output is None:
+            from .winput import NullInput, WindowsInput
+            try:
+                self.pc_output = WindowsInput()
+            except OSError as exc:
+                self.error = f"PC mode unavailable: {exc}"
+                log.warning(self.error)
+                self.pc_output = NullInput()
+        return self.pc_output
+
+    def release_pc(self, slot=None):
+        """Leave nothing pressed: on mode changes, new configs and disconnections."""
+        for s in ([slot] if slot is not None else list(self.pc_engines)):
+            engine = self.pc_engines.pop(s, None)
+            if engine is not None:
+                engine.release_all()
 
     def report_output(self, slot, output):
         """Publish what the virtual controller shows (for the GUI's live Xbox view)."""
@@ -215,6 +272,7 @@ class GamepadHub:
     def close(self):
         for slot in list(self.pads):
             self.close_pad(slot)
+        self.release_pc()
 
     def game_rumble(self, slot, large, small):
         # ViGEm calls this from its own thread.
@@ -227,11 +285,12 @@ class GamepadHub:
     def set_mode(self, mode):
         if mode not in (1, 2, 3, 4):
             raise ValueError("mode must be 1..4")
+        self.release_pc()
         self.config["mode"] = mode
         if self.template is None:
             self.close()
         for slot in self.connected:  # check the new template against each remote
-            self.problems[slot] = unavailable_bindings(self.template, self.capabilities.get(slot, {}))
+            self.problems[slot] = unavailable_bindings(self.current, self.capabilities.get(slot, {}))
         current = self.config["modes"][mode - 1]
         log.info("Gamepad mode %d (%s)", mode, current["name"] if current else "empty")
         for slot in sorted(self.connected):
@@ -252,7 +311,7 @@ class GamepadHub:
             for _ in range(mode):
                 await self.rumble(slot, 120)
                 await asyncio.sleep(0.3)
-            if self.problems.get(slot) and self.template is not None:
+            if self.problems.get(slot):
                 await asyncio.sleep(0.2)
                 await self.rumble(slot, 700)
         except Exception as exc:
@@ -260,6 +319,7 @@ class GamepadHub:
 
     def set_config(self, config):
         self.config = validate_config(config)
+        self.release_pc()
         if self.template is None:
             self.close()
         self.changed()

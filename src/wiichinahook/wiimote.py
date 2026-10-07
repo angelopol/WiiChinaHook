@@ -142,7 +142,7 @@ class ReportParser:
             s.accel_timestamp_us = now
             if not (self.extension or "").startswith("motionplus"):
                 self.orientation.reset()
-                s.orientation = list(tilt_from_accel(s.accel_g))
+                s.orientation = list(self.orientation.output(tilt_from_accel(s.accel_g)))
         if report in (0x33, 0x36, 0x37):
             offset = 2 if report == 0x36 else 5
             s.ir = parse_ir(p[offset:offset + (12 if report == 0x33 else 10)], report == 0x33)

@@ -94,7 +94,7 @@ DolphinBar o el adaptador. Para volver a Dolphin, detén el servicio.
   sticks se mueven) y remapeo libre de cada control Xbox en cada uno de los cuatro modos
   (ver más abajo). Cada modo es Vacío, Xbox o DSU; un modo DSU muestra en la propia
   pestaña los nombres de las entradas DSU y las guías de Dolphin y Cemu.
-- **Registro:** registro del servicio en vivo.
+- **Registro:** registro del servicio en vivo; **Guardar log…** lo escribe en un archivo `.log` en la carpeta que elijas.
 - Interfaz en inglés y español (selector de idioma en la cabecera).
 
 La GUI ejecuta el servicio en su propio proceso y lo detiene al cerrar la ventana. Si
@@ -203,6 +203,14 @@ tarjeta de la GUI:
   vibración corta, deja el mando quieto ~1 s. Una doble vibración indica que se renovó el
   sesgo del giroscopio y se recentró la orientación; una larga, que se movió y solo se
   recentró. Déjala desactivada en juegos que calibran por sí mismos.
+
+  **Recentrar** también toma el pitch actual como posición neutra: sujeta el mando como
+  apuntas de forma natural (aunque sea un poco inclinado hacia abajo) y eso pasa a ser lo
+  horizontal. Desde ahí se miden las inclinaciones hacia arriba o hacia abajo, en la vista
+  3D y en el stick de apuntado.
+  - El roll no se toca.
+  - En el agarre de lado no se aplica ajuste de pitch: ahí inclinar es girar.
+  - El ajuste se limita a ±45° y aparece en la API como `pitch_offset_deg`.
 - **Calibración con la barra sensora**: mientras la cámara IR ve los dos puntos de la
   barra y el mando está más o menos nivelado, su posición horizontal da la dirección real
   hacia la pantalla y elimina poco a poco la deriva del giro (como hace la Wii). La
@@ -257,6 +265,9 @@ no tiene (p. ej. botones del Nunchuk sin Nunchuk), que la GUI enumera. El botón
 Wiimote no se puede usar: el hardware no lo envía. También con
 `wiichinahook gamepad --mode N` o desde la GUI.
 
+**Modo al iniciar** (pestaña *Mando Xbox*): el último modo activo (por defecto; se guarda
+cada vez que cambia, desde el mando, la GUI o la bandeja) o un modo fijo del 1 al 4.
+
 El modo 1 empieza con la plantilla Xbox de juego, el modo 2 como modo DSU (B + →) y los
 modos 3–4 vacíos. Una configuración guardada de una versión anterior con el modo 2 vacío
 pasa a DSU automáticamente. La plantilla de juego:
@@ -277,7 +288,17 @@ Cada control Xbox se puede remapear en la GUI a un botón del Wiimote o del Nunc
 en cualquier sentido, porque una sacudida rápida siempre rebota) o una **combinación** de
 hasta tres de ellos a la vez: botones y/o sacudidas, p. ej. A + agitar arriba/abajo. Una
 combinación no envía también sus botones por separado, y las más largas tienen prioridad
-sobre las más cortas que se solapan. La sensibilidad de las sacudidas se ajusta por eje
+sobre las más cortas que se solapan.
+
+Un botón que forma parte de una combinación espera el **margen de combinación** (50 ms
+por defecto, 0–300, por modo) antes de activarse solo, así sus compañeros pueden llegar
+unos milisegundos después. Los botones que no están en ninguna combinación nunca
+esperan. Dos detalles más:
+
+- Un toque rápido de un botón de combinación sigue llegando al juego, como pulsación
+  corta.
+- Tras una combinación, sus botones siguen "usados" hasta soltarlos. Soltar C antes que
+  Z después de C + Z no pulsa el botón propio de Z. La sensibilidad de las sacudidas se ajusta por eje
 para el Wiimote y el Nunchuk (el acelerómetro del Nunchuk no está calibrado), con una
 prueba en vivo en la pestaña que muestra qué eje se disparó y con qué fuerza. 
 
@@ -288,13 +309,13 @@ El stick derecho puede usar una de tres fuentes de movimiento:
   - Horizontal: el giro respecto a donde apuntaba el mando al activar el modo o en la
     última calibración rápida. Con la corrección de dirección por la barra sensora, el
     centro es la propia barra.
-  - Vertical: la inclinación respecto a la gravedad, así que no deriva.
+  - Vertical: la inclinación respecto a la gravedad (desde el pitch neutro de la última recalibración), así que no deriva.
   - Sensibilidad: los grados necesarios para llegar al máximo, por separado en cada eje.
 - **Velocidad del MotionPlus:** la velocidad de giro, como un ratón. El stick vuelve al
   centro cuando paras de girar.
 - **Puntero IR.**
 
-Las tres comparten el rango IR y la zona muerta. El Nunchuk no tiene giroscopio. Las
+Las dos fuentes del MotionPlus comparten una **zona muerta del giroscopio**, que ignora pequeños movimientos de la mano cerca del centro. El puntero IR y el stick del Nunchuk usan la zona muerta normal. El Nunchuk no tiene giroscopio. Las
 configuraciones anteriores a esta versión que usaban la velocidad pasan a apuntado
 automáticamente. La vibración de los juegos llega al Wiimote. La configuración se guarda en
 `"gamepad"` dentro de `config.local.json`.
@@ -302,6 +323,22 @@ automáticamente. La vibración de los juegos llega al Wiimote. La configuració
 Requiere el controlador **ViGEmBus** (lo instalan DS4Windows/BthPS3 o el instalador que
 incluye `vgamepad`). Su autor ya no lo mantiene, pero funciona en Windows 11. Aún sin
 verificar con hardware: el sentido vertical del stick derecho por IR.
+
+## Modo PC (ratón y teclado)
+
+Modo 3 por defecto (B + ↓): los mandos manejan el propio Windows, sin mando virtual.
+
+- **Ratón:** lo mueve el giroscopio, el puntero IR, el stick del Nunchuk o la cruceta. Lo
+  que lo mueve no se puede mapear también.
+- **Acciones:** cada botón, las cuatro direcciones del stick del Nunchuk y las sacudidas
+  pueden enviar:
+  - teclas y atajos, con cualquier número de teclas (`ctrl+9`, `ctrl+shift+esc`);
+  - clics y rueda del ratón;
+  - teclas del sistema (silenciar, volumen, multimedia, menú Inicio);
+  - abrir un programa o página web;
+  - una acción **alternar** que recorre varias acciones.
+
+Detalles y nombres de teclas: [docs/PC_MODE.es.md](docs/PC_MODE.es.md).
 
 ## Altavoz (opcional)
 
@@ -347,6 +384,17 @@ en Dolphin/Cemu u otro cliente DSU (paso a paso: [Dolphin](docs/guides/dolphin.e
 DSU (el modo 2 por defecto). No actives simultáneamente el passthrough de
 Dolphin sobre este mismo adaptador. DSU no equivale a un Wiimote Bluetooth real:
 cada emulador debe mapear las entradas que admite.
+
+**Servidores DSU adicionales** (activados por defecto; interruptores en el modo DSU,
+puertos en *Ajustes → Red*, 0 = desactivado):
+
+- **Movimiento del Nunchuk** (`26762`): el acelerómetro del Nunchuk, para el *Extension
+  Motion Input* de Dolphin.
+- **Puntero IR** (`26763`): el puntero de la cámara como stick derecho absoluto, más
+  `Cross` mientras no ve la barra, para el *Point* de Dolphin.
+
+Un slot DSU solo lleva un sensor de movimiento y nada de IR, de ahí los servidores
+adicionales. Cómo enlazarlos: [guía de Dolphin](docs/guides/dolphin.es.md).
 
 - Mantiene el mapeo de botones anterior.
 - Nunchuk: stick izquierdo, C → L1 y Z → L2.

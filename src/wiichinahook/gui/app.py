@@ -25,6 +25,8 @@ from .model import (BUTTONS, BUTTON_LABELS, bar_value, config_from_form, fmt, fo
 from .service import ServiceRuntime
 from .gamepad_tab import GamepadTab
 from .tray import Tray
+from .widgets import columns, hint, section
+from .. import __version__
 from .wiimote3d import project
 from ..drivers import choose, packages_for, switch_adapter
 from ..usb_drivers import ZADIG_URL, find_zadig, list_adapters
@@ -44,15 +46,27 @@ GYRO_RANGE_DPS = 250.0  # bar full scale; typical hand rotations stay below it
 
 
 class LogBuffer(logging.Handler):
-    def __init__(self, size=400):
+    """Recent log lines for the Log tab (it shows the last 200) and for "Save log"."""
+
+    def __init__(self, size=2000):
         super().__init__(logging.INFO)
         self.lines = collections.deque(maxlen=size)
+        self.formatter_full = logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
         self.version = 0
         self.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s", "%H:%M:%S"))
 
     def emit(self, record):
         self.lines.append(self.format(record))
         self.version += 1
+
+    def export_text(self, version=""):
+        """The buffer as a .log file: a short header, then one line per record."""
+        import datetime
+        import platform
+        header = [f"# WiiChinaHook {version} log, saved {datetime.datetime.now():%Y-%m-%d %H:%M:%S}",
+                  f"# {platform.platform()} · Python {platform.python_version()}",
+                  f"# {len(self.lines)} most recent lines (times are local, HH:MM:SS)", ""]
+        return "\n".join(header + list(self.lines)) + "\n"
 
 
 def chip(text, width=30):
@@ -296,7 +310,7 @@ class Controller:
         self.config = self.load_config()
         self.states = {}
         self.dirty = set()
-        self.tab_index = 0
+        self.tab_index = min(3, max(0, int(self.prefs.get("tab", 0) or 0)))  # last tab used
         self.service_mode = None
         self.logs = LogBuffer()
         logging.getLogger().addHandler(self.logs)
@@ -311,6 +325,7 @@ class Controller:
         self.cards = []
         self.closing = False
         self.tray = None
+        self.file_picker = None
         self.visible = True
         self.tray_mode = None
 
@@ -401,15 +416,26 @@ class Controller:
         page = self.page
         page.controls.clear()
         page.title = t("title")
-        self.status_dot = ft.Container(width=12, height=12, border_radius=6)
-        self.status_text = ft.Text("", size=13)
+        self.status_dot = ft.Container(width=10, height=10, border_radius=5)
+        self.status_text = ft.Text("", size=13, weight=ft.FontWeight.W_500)
         self.toggle = ft.FilledButton(t("start"), icon=ft.Icons.PLAY_ARROW, on_click=self.on_toggle)
-        language = ft.Dropdown(value=self.t.language, width=140, dense=True, label=t("language"),
+        language = ft.Dropdown(value=self.t.language, width=130, dense=True, label=t("language"),
                                options=[ft.DropdownOption(key, text) for key, text in LANGUAGES.items()],
                                on_select=self.on_language)
-        header = ft.Row([ft.Icon(ft.Icons.SPORTS_ESPORTS), ft.Text(t("title"), size=20, weight=ft.FontWeight.BOLD),
-                         ft.Container(width=16), self.status_dot, self.status_text, ft.Container(expand=True),
-                         self.toggle, language], vertical_alignment=ft.CrossAxisAlignment.CENTER)
+        status_chip = ft.Container(
+            padding=ft.Padding.symmetric(horizontal=12, vertical=6), border_radius=20,
+            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
+            content=ft.Row([self.status_dot, self.status_text], spacing=8, tight=True,
+                           vertical_alignment=ft.CrossAxisAlignment.CENTER))
+        header = ft.Container(
+            padding=ft.Padding.symmetric(horizontal=16, vertical=10), border_radius=16,
+            bgcolor=ft.Colors.SURFACE_CONTAINER,
+            content=ft.Row(spacing=14, vertical_alignment=ft.CrossAxisAlignment.CENTER, controls=[
+                ft.Image(src="icon.png", width=40, height=40),
+                ft.Column([ft.Text(t("title"), size=20, weight=ft.FontWeight.BOLD),
+                           ft.Text(f"{t('subtitle')} · v{__version__}", size=12,
+                                   color=ft.Colors.ON_SURFACE_VARIANT)], spacing=0, tight=True),
+                status_chip, ft.Container(expand=True), self.toggle, language]))
         self.cards = [SlotCard(slot, t, self) for slot in range(4)]
         self.pair_panel = self.build_pair_panel()
         controllers = ft.Column(scroll=ft.ScrollMode.AUTO, expand=True, controls=[
@@ -418,7 +444,13 @@ class Controller:
         ])
         self.log_view = ft.ListView(expand=True, spacing=2, auto_scroll=True)
         log_tab = ft.Column(expand=True, controls=[
-            ft.Row([ft.TextButton(t("clear_log"), on_click=self.on_clear_log)]), self.log_view])
+            ft.Row([ft.Icon(ft.Icons.ARTICLE, color=ft.Colors.PRIMARY),
+                    ft.Text(t("tab_log"), size=15, weight=ft.FontWeight.W_600), ft.Container(expand=True),
+                    ft.OutlinedButton(t("log_export"), icon=ft.Icons.SAVE_ALT, on_click=self.on_export_log),
+                    ft.TextButton(t("clear_log"), icon=ft.Icons.DELETE_SWEEP, on_click=self.on_clear_log)]),
+            ft.Container(self.log_view, expand=True, padding=12, border_radius=14,
+                         bgcolor=ft.Colors.SURFACE_CONTAINER_LOW,
+                         border=ft.Border.all(1, ft.Colors.OUTLINE_VARIANT))])
         self.gamepad_tab = GamepadTab(self)
         gamepad = self.gamepad_tab.build()
         tabs = ft.Tabs(length=4, expand=True, selected_index=self.tab_index, on_change=self.on_tab,
@@ -427,7 +459,8 @@ class Controller:
                             ft.Tab(label=t("tab_settings"), icon=ft.Icons.SETTINGS),
                             ft.Tab(label=t("tab_gamepad"), icon=ft.Icons.VIDEOGAME_ASSET),
                             ft.Tab(label=t("tab_log"), icon=ft.Icons.ARTICLE)]),
-            ft.TabBarView(expand=True, controls=[controllers, self.build_settings(), gamepad, log_tab]),
+            ft.TabBarView(expand=True, controls=[ft.Container(view, padding=ft.Padding.only(top=12))
+                                                 for view in (controllers, self.build_settings(), gamepad, log_tab)]),
         ]))
         page.add(header, tabs)
         for slot in range(4):
@@ -441,12 +474,12 @@ class Controller:
         self.pair_mode = ft.Dropdown(value="sync", width=200, dense=True, options=[
             ft.DropdownOption("sync", t("pair_mode_sync")), ft.DropdownOption("temporary", t("pair_mode_temporary"))])
         self.pair_address = ft.TextField(label=t("pair_address"), width=200, dense=True)
-        return ft.Card(visible=False, content=ft.Container(padding=12, content=ft.Column([
-            ft.Text(t("pair_title"), weight=ft.FontWeight.BOLD),
+        panel = section(t("pair_title"), ft.Icons.BLUETOOTH_SEARCHING, [
             ft.Row([self.pair_seconds, self.pair_mode, self.pair_address,
                     ft.FilledButton(t("pair"), icon=ft.Icons.BLUETOOTH_SEARCHING, on_click=self.on_pair)],
-                   wrap=True),
-        ])))
+                   wrap=True)])
+        panel.visible = False
+        return panel
 
     def build_settings(self):
         t = self.t
@@ -457,6 +490,8 @@ class Controller:
             "transport": ft.TextField(value=form["transport"], label=t("transport"), width=320),
             "dsu_host": ft.TextField(value=form["dsu_host"], label=t("dsu_host"), width=180),
             "dsu_port": ft.TextField(value=form["dsu_port"], label=t("dsu_port"), width=120),
+            "dsu_nunchuk_port": ft.TextField(value=form["dsu_nunchuk_port"], label=t("dsu_nunchuk_port"), width=150),
+            "dsu_ir_port": ft.TextField(value=form["dsu_ir_port"], label=t("dsu_ir_port"), width=150),
             "api_port": ft.TextField(value=form["api_port"], label=t("api_port"), width=120),
         }
         self.switches = {"ir": ft.Switch(label=t("ir"), value=form["ir"]),
@@ -465,7 +500,7 @@ class Controller:
             ft.Radio(value="dolphinbar", label=t("mode_dolphinbar")),
             ft.Radio(value="bluetooth", label=t("mode_bluetooth"))]))
         self.dolphinbar_help = ft.Text(t("dolphinbar_help"), size=12, color=ft.Colors.ON_SURFACE_VARIANT)
-        self.adapter_select = ft.Dropdown(label=t("adapter_select"), width=520, options=[],
+        self.adapter_select = ft.Dropdown(label=t("adapter_select"), expand=True, options=[],
                                           on_select=self.on_adapter_select)
         self.adapter_info = ft.Text("", size=12, color=ft.Colors.ON_SURFACE_VARIANT)
         self.zadig_box = ft.Container(visible=False, padding=12, border_radius=8,
@@ -484,15 +519,19 @@ class Controller:
             ft.Row([self.fields["vid"], self.fields["pid"], self.fields["transport"]], wrap=True)])
         self.adapters = []
         self.on_mode_change(None)
-        return ft.Column(scroll=ft.ScrollMode.AUTO, expand=True, spacing=14, controls=[
-            *self.build_app_settings(), ft.Divider(),
-            *self.build_speaker_settings(), ft.Divider(),
-            ft.Text(t("mode"), size=16, weight=ft.FontWeight.BOLD), self.mode_group,
-            self.dolphinbar_help, self.bluetooth_box, ft.Divider(),
+        connection = section(t("mode"), ft.Icons.USB, [self.mode_group, self.dolphinbar_help, self.bluetooth_box])
+        network = section(t("settings_network"), ft.Icons.LAN, [
             ft.Row([self.fields["dsu_host"], self.fields["dsu_port"], self.fields["api_port"]], wrap=True),
-            ft.Row([self.switches["ir"], self.switches["motionplus"]]),
-            ft.Row([ft.FilledButton(t("save"), icon=ft.Icons.SAVE, on_click=self.on_save)]),
-        ])
+            ft.Row([self.fields["dsu_nunchuk_port"], self.fields["dsu_ir_port"]], wrap=True),
+            hint(t("dsu_extra_ports_hint"))],
+            subtitle=t("settings_network_hint"))
+        sensors = section(t("settings_sensors"), ft.Icons.SENSORS, [
+            ft.Row([self.switches["ir"], self.switches["motionplus"]], wrap=True)])
+        save = ft.Row([ft.FilledButton(t("save"), icon=ft.Icons.SAVE, on_click=self.on_save),
+                       hint(t("settings_save_hint"))], wrap=True, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+        return ft.Column(scroll=ft.ScrollMode.AUTO, expand=True, controls=[
+            columns([connection, network, sensors, save],
+                    [self.build_app_settings(), self.build_speaker_settings()])])
 
     def build_app_settings(self):
         """Windows integration: autostart, tray and service start (saved at once)."""
@@ -501,9 +540,8 @@ class Controller:
                                           disabled=sys.platform != "win32", on_change=self.on_autostart)
         prefs = [ft.Switch(label=t(f"app_{key}"), value=self.pref(key), data=key, on_change=self.on_app_pref)
                  for key in APP_PREFS]
-        return [ft.Text(t("app_title"), size=16, weight=ft.FontWeight.BOLD),
-                ft.Row([self.autostart_switch, *prefs], wrap=True, spacing=24),
-                ft.Text(t("app_hint"), size=12, color=ft.Colors.ON_SURFACE_VARIANT)]
+        return section(t("app_title"), ft.Icons.SETTINGS_APPLICATIONS, [self.autostart_switch, *prefs],
+                       subtitle=t("app_hint"), spacing=6)
 
     def build_speaker_settings(self):
         """Optional speaker sounds: per event a built-in sound, a custom WAV or off."""
@@ -520,21 +558,23 @@ class Controller:
         for event in SOUND_EVENTS:
             sound = speaker["events"].get(event)
             kind = "off" if not sound else sound if sound in BUILTIN_SOUNDS else "custom"
-            path = ft.TextField(value=sound if kind == "custom" else "", label=t("sound_path"), width=360,
+            path = ft.TextField(value=sound if kind == "custom" else "", label=t("sound_path"), expand=True,
                                 dense=True, visible=kind == "custom")
-            choice = ft.Dropdown(value=kind, width=190, dense=True, options=choices)
+            choice = ft.Dropdown(value=kind, width=200, dense=True, options=choices)
             choice.on_select = lambda e, path=path: self.on_sound_choice(e, path)
             test = ft.IconButton(ft.Icons.PLAY_ARROW, tooltip=t("sound_try"),
                                  on_click=lambda e, ev=event: self.page.run_task(self.try_sound, ev))
             self.sound_rows[event] = (choice, path)
-            rows.append(ft.Row([ft.Text(t(f"sound_event_{event}"), width=170), choice, test, path],
-                               wrap=True, vertical_alignment=ft.CrossAxisAlignment.CENTER))
-        return [ft.Text(t("speaker_title"), size=16, weight=ft.FontWeight.BOLD),
-                ft.Text(t("speaker_hint"), size=12, color=ft.Colors.ON_SURFACE_VARIANT),
-                ft.Row([self.speaker_enabled, ft.Text(t("speaker_volume")), self.speaker_volume], wrap=True,
-                       vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                *rows,
-                ft.Row([ft.FilledButton(t("save"), icon=ft.Icons.SAVE, on_click=self.on_speaker_save)])]
+            rows.append(ft.Column([ft.Row([ft.Text(t(f"sound_event_{event}"), width=150), choice, test],
+                                          vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                                   ft.Row([path])], spacing=4, tight=True))
+        return section(t("speaker_title"), ft.Icons.VOLUME_UP, [
+            self.speaker_enabled,
+            ft.Row([ft.Text(t("speaker_volume")), self.speaker_volume],
+                   vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            *rows,
+            ft.Row([ft.FilledButton(t("save"), icon=ft.Icons.SAVE, on_click=self.on_speaker_save)])],
+            subtitle=t("speaker_hint"))
 
     def on_sound_choice(self, e, path):
         path.visible = e.control.value == "custom"
@@ -679,6 +719,8 @@ class Controller:
 
     def on_tab(self, e):
         self.tab_index = e.control.selected_index
+        self.prefs["tab"] = self.tab_index           # reopen where the user left off
+        self.save_prefs()
         if self.render():
             self.page.update()
 
@@ -894,6 +936,28 @@ class Controller:
         if self.tray:
             self.tray.refresh(self.t)
 
+    async def on_export_log(self, e):
+        """Save the log as a .log file wherever the user chooses (native save dialog)."""
+        import datetime
+        if self.file_picker is None:
+            self.file_picker = ft.FilePicker()
+            self.page.services.append(self.file_picker)
+            self.page.update()
+        path = await self.file_picker.save_file(
+            dialog_title=self.t("log_export"), allowed_extensions=["log"],
+            file_name=f"wiichinahook-{datetime.datetime.now():%Y%m%d-%H%M%S}.log")
+        if not path:
+            return                                        # dialog cancelled
+        path = Path(path)
+        if path.suffix.lower() != ".log":
+            path = path.with_name(path.name + ".log")
+        try:
+            path.write_text(self.logs.export_text(__version__), encoding="utf-8")
+        except OSError as exc:
+            self.notify(self.t("failed", error=exc))
+            return
+        self.notify(self.t("log_saved", path=path))
+
     def on_clear_log(self, e):
         self.logs.lines.clear()
         self.logs.version += 1
@@ -925,6 +989,10 @@ def run(config_path=None, minimized=False):
         page.window.min_width, page.window.min_height = 760, 560
         page.window.icon = str(ASSETS / "icon.ico")
         page.padding = 16
+        # Material 3 colours derived from the icon's blue; follows the Windows light/dark setting.
+        page.theme = ft.Theme(color_scheme_seed="#2462C4")
+        page.dark_theme = ft.Theme(color_scheme_seed="#2462C4")
+        page.theme_mode = ft.ThemeMode.SYSTEM
         controller = Controller(page, config_path, prefs_path)
         page.window.prevent_close = True
         page.window.on_event = controller.on_window_event

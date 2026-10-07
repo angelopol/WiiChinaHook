@@ -26,7 +26,14 @@ plantilla o null), `types` (`"xbox"`, `"dsu"` o null por modo), `pads` (slots co
 no puede usar), `error` (p. ej. falta ViGEmBus) y la `config` completa. `gamepad_mode`
 cambia el modo de todos los mandos y `gamepad_config` reemplaza la configuración (validada;
 los controles Xbox no indicados quedan sin asignar). Un modo es `null` (vacío), una
-plantilla Xbox (`"type": "xbox"`, por defecto) o `{"type": "dsu", "name": "DSU"}`. Los
+plantilla Xbox (`"type": "xbox"`, por defecto) o `{"type": "dsu", "name": "DSU", "nunchuk_server": true, "ir_server": true, "ir_range": 0.5}`
+(los servidores DSU adicionales para el movimiento del Nunchuk y el puntero IR; puertos
+`dsu.nunchuk_port`/`dsu.ir_port` en la configuración, 0 = no se abre), o una plantilla PC
+(`"type": "pc"`: `mouse` con `source` `gyro`/`ir`/`nc_stick`/`wm_dpad`/null y sus velocidades,
+`shake_g`, y `buttons` que asigna entradas como `wm_a` o `nc_up` a acciones como
+`"keys:ctrl+9"`, `"mouse:left"`, `"system:mute"`, `"open:notepad"` o
+`"toggle:ctrl+c | ctrl+v"`; ver [PC_MODE.es.md](PC_MODE.es.md)). Un modo 3 vacío en una
+configuración anterior a `"version": 4` pasa a ser el modo PC. Los
 clientes DSU solo reciben entradas mientras hay un modo DSU activo; en los demás modos los
 slots siguen conectados con datos neutros (10 paquetes por segundo en vez de uno por reporte). Una configuración sin `"version": 2` con el modo
 2 vacío recibe ahí el modo DSU. Fuentes:
@@ -38,7 +45,7 @@ por eje en g y `gyro_full_dps`/`gyro_full_dps_y` la sensibilidad horizontal/vert
 giroscopio. El campo `shakes` del estado (`seq` y los últimos eventos por slot con
 `device`, `axis` y `g`) sirve para ajustarlos; sticks `nc_stick`,
 `gyro_angle` (apuntado, se mantiene; `angle_full_deg`/`angle_full_deg_y` grados para el máximo),
-`gyro` (velocidad, vuelve al centro), `ir`. Tras `subscribe` llega `{"event":"gamepad","data":...}` cada vez que cambian el modo
+`gyro` (velocidad, vuelve al centro), `ir`; `chord_window_ms` (0–300, 50 por defecto) es lo que espera un miembro de combinación antes de activarse solo; `startup_mode` (1–4, o null = último modo activo) elige el modo con el que arranca el servicio; `gyro_deadzone` (0–0,5) se aplica a las dos fuentes del giroscopio y `deadzone` al stick del Nunchuk y al IR. Tras `subscribe` llega `{"event":"gamepad","data":...}` cada vez que cambian el modo
 o sus avisos, y
 `{"event":"xbox","data":{"slot":0,"active":true,"buttons":["A"],"lt":0,"rt":1,"lx":0,"ly":0,"rx":0,"ry":0}}`
 cada vez que cambia la salida del mando virtual de un slot (`"active": false` si no tiene).
@@ -103,7 +110,7 @@ El ejemplo está abreviado. El estado completo contiene:
 | `extension` | null, nunchuk, motionplus o motionplus+nunchuk |
 | `timestamp_us` | Tiempo monotónico del último reporte/estado en microsegundos |
 | `accel_timestamp_us`, `gyro_timestamp_us`, `ir_timestamp_us`, `nunchuk_timestamp_us` | Tiempo de cada muestra; 0 antes de recibirla |
-| `calibration` | Fuentes de calibración, sesgo manual de gyro y `gyro_scale` (factores yaw, roll, pitch), si existen; `recenter_seq` aumenta en cada calibración rápida; `heading: "ir"` cuando la barra sensora ya corrige la dirección |
+| `calibration` | Fuentes de calibración, sesgo manual de gyro y `gyro_scale` (factores yaw, roll, pitch), si existen; `recenter_seq` aumenta en cada calibración rápida y `pitch_offset_deg` es el pitch neutro que tomó (`orientation` se da relativa a él); `heading: "ir"` cuando la barra sensora ya corrige la dirección |
 
 **Ejes.** `accel_g` usa el sistema crudo del Wii, que es dextrógiro: +X hacia la
 **izquierda** del mando, +Y hacia **atrás** (el extremo de los botones 1/2), +Z saliendo

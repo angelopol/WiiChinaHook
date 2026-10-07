@@ -14,6 +14,10 @@ sys.path.insert(0, str(SRC))
 # Keep imports working when the checkout's launcher shadows the installed package.
 if __name__ == "wiichinahook":
     __path__ = [str(SRC / "wiichinahook")]
+    # Mirror the package's metadata too (e.g. `from .. import __version__`).
+    import re
+    __version__ = re.search(r'^__version__ = "(.+)"', (SRC / "wiichinahook" / "__init__.py").read_text(
+        encoding="utf-8"), re.M).group(1)
 
 from wiichinahook.cli import main
 

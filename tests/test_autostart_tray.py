@@ -29,8 +29,14 @@ def test_enable_refresh_disable_on_a_scratch_key(monkeypatch, tmp_path):
         assert not autostart.enabled()
         autostart.enable(tmp_path / "a.json")
         assert "a.json" in autostart.current()
-        autostart.refresh(tmp_path / "b.json")               # follows a moved app/config
-        assert "b.json" in autostart.current()
+        autostart.refresh(tmp_path / "b.json")               # another config never takes it over
+        assert "a.json" in autostart.current()
+        moved = autostart.current().replace("python", "moved-python", 1)
+        import winreg
+        with autostart._open(winreg.KEY_SET_VALUE) as key:   # same config, program moved
+            winreg.SetValueEx(key, autostart.VALUE_NAME, 0, winreg.REG_SZ, moved)
+        autostart.refresh(tmp_path / "a.json")               # follows the app
+        assert autostart.current() == autostart.launch_command(tmp_path / "a.json")
         autostart.disable()
         autostart.disable()                                  # idempotent
         assert not autostart.enabled()

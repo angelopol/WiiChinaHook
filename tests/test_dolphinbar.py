@@ -246,8 +246,8 @@ def test_barlink_pads_reports_and_strips_bluetooth_header():
     try:
         link = BarLink("p", loop, Opener)
         link.write(bytes([0xA2, 0x11, 0x10]))
+        link.close()                                      # waits for queued writes to go out
         assert clone.writes[-1] == bytes([0x11, 0x10]) + bytes(20)
-        link.close()
     finally:
         loop.close()
 

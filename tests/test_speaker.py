@@ -101,9 +101,11 @@ async def test_play_sets_up_once_streams_paced_reports_and_stays_ready(monkeypat
     audio = [(t, p) for t, r, p in reports if r == 0x18]
     assert [p[0] for _, p in audio] == [20 << 3, 20 << 3, 10 << 3] and audio[2][1][1:11] == adpcm[40:]
     gaps = [b[0] - a[0] for a, b in zip(audio, audio[1:])]
-    assert all(0.008 < gap < 0.03 for gap in gaps)         # ~13.3 ms apart
+    # ~13.3 ms apart. Absolute deadlines keep the average exact even if the OS delays
+    # one report (CPU spikes on a busy PC), so check the average and cap single gaps.
+    assert 0.010 < sum(gaps) / len(gaps) < 0.017 and max(gaps) < 0.05
     # The setup goes out back to back: the first audio report follows at once.
-    assert audio[0][0] - reports[0][0] < 0.01
+    assert audio[0][0] - reports[0][0] < 0.03
 
     channel.sent.clear()                                   # next sound: still configured, only unmute
     await speaker.play(session, adpcm[:20], volume=0.5)

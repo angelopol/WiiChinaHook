@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import math
 import statistics
 import time
 
@@ -239,8 +240,10 @@ class WiimoteSession:
                 bias_updated = True
                 if self.on_bias_changed:
                     self.on_bias_changed(self.parser.gyro_bias)
-        self.parser.orientation.recenter()
+        orientation = self.parser.orientation
+        orientation.recenter(self.state.accel_g)        # heading and pitch (neutral grip)
         self.state.calibration["recenter_seq"] = self.state.calibration.get("recenter_seq", 0) + 1
+        self.state.calibration["pitch_offset_deg"] = round(math.degrees(orientation.pitch_offset), 1)
         self.publish(self.state)
         if bias_updated:
             await self.rumble(120)

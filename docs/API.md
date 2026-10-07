@@ -26,7 +26,13 @@ null), `types` (`"xbox"`, `"dsu"` or null per mode), `pads` (slots with a virtua
 drive), `error` (e.g. ViGEmBus missing) and the full `config`. `gamepad_mode` switches
 every remote, `gamepad_config` replaces the configuration (validated; unspecified Xbox
 controls are unassigned). A mode is `null` (empty), an Xbox template (`"type": "xbox"`,
-the default) or `{"type": "dsu", "name": "DSU"}`. DSU clients receive input only while a
+the default) or `{"type": "dsu", "name": "DSU", "nunchuk_server": true, "ir_server": true, "ir_range": 0.5}`
+(the extra DSU servers for Nunchuk motion and the IR pointer; ports `dsu.nunchuk_port`/`dsu.ir_port`
+in the config, 0 = not opened), or a PC template (`"type": "pc"`: `mouse` with `source`
+`gyro`/`ir`/`nc_stick`/`wm_dpad`/null and its speeds, `shake_g`, and `buttons` mapping inputs
+such as `wm_a` or `nc_up` to actions like `"keys:ctrl+9"`, `"mouse:left"`, `"system:mute"`,
+`"open:notepad"` or `"toggle:ctrl+c | ctrl+v"`; see [PC_MODE.md](PC_MODE.md)). An empty mode 3
+in a configuration older than `"version": 4` becomes the PC mode. DSU clients receive input only while a
 DSU mode is active; in the other modes the slots stay connected with neutral data (10 packets per second instead of every report). A
 configuration without `"version": 2` whose mode 2 is empty gets the DSU mode there.
 Sources: `wm_up/down/left/right/a/b/minus/plus/home/1/2`,
@@ -35,7 +41,7 @@ direction; the older `*_shake_left/right/up/down/forward/back` are still accepte
 to three of them joined with `+` (buttons and/or shakes); per-template `shake_wm` and
 `shake_nc` give the per-axis thresholds in g and `gyro_full_dps`/`gyro_full_dps_y` the
 horizontal/vertical gyro sensitivity. The status `shakes` (`seq`, last events per slot
-with `device`, `axis`, `g`) is meant for tuning; sticks `nc_stick`, `gyro_angle` (aim, holds; `angle_full_deg`/`angle_full_deg_y` degrees for full deflection), `gyro` (speed, springs back), `ir`. After `subscribe`,
+with `device`, `axis`, `g`) is meant for tuning; sticks `nc_stick`, `gyro_angle` (aim, holds; `angle_full_deg`/`angle_full_deg_y` degrees for full deflection), `gyro` (speed, springs back), `ir`; `chord_window_ms` (0–300, default 50) is how long a combination member waits before firing alone; the config's `startup_mode` (1–4, or null = last active mode) picks the mode the service starts in; `gyro_deadzone` (0–0.5) applies to both gyro sources, `deadzone` to the Nunchuk stick and IR. After `subscribe`,
 `{"event":"gamepad","data":...}` arrives whenever the mode or its warnings change, and
 `{"event":"xbox","data":{"slot":0,"active":true,"buttons":["A"],"lt":0,"rt":1,"lx":0,"ly":0,"rx":0,"ry":0}}`
 whenever a slot's virtual controller output changes (`"active": false` when it has none).
@@ -100,7 +106,7 @@ The example is abbreviated. The full state contains:
 | `extension` | null, nunchuk, motionplus or motionplus+nunchuk |
 | `timestamp_us` | Monotonic time of the last report/state in microseconds |
 | `accel_timestamp_us`, `gyro_timestamp_us`, `ir_timestamp_us`, `nunchuk_timestamp_us` | Time of each sample; 0 before the first one |
-| `calibration` | Calibration sources, manual gyro bias and `gyro_scale` (yaw, roll, pitch factors), if any; `recenter_seq` increases on every quick calibration; `heading: "ir"` once the sensor bar corrects the heading |
+| `calibration` | Calibration sources, manual gyro bias and `gyro_scale` (yaw, roll, pitch factors), if any; `recenter_seq` increases on every quick calibration and `pitch_offset_deg` is the neutral pitch it took (`orientation` is reported relative to it); `heading: "ir"` once the sensor bar corrects the heading |
 
 **Axes.** `accel_g` uses the raw Wii frame, which is right-handed: +X to the remote's
 **left**, +Y towards the **back** (the 1/2 buttons end), +Z out of the buttons face.

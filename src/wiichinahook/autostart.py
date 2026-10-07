@@ -1,6 +1,7 @@
 """Start the GUI with Windows: a per-user `Run` registry value (no admin rights)."""
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -54,7 +55,23 @@ def disable() -> None:
         pass
 
 
+def configured_path(command: str | None) -> Path | None:
+    """The --config path of a registered command."""
+    match = re.search(r'--config "([^"]+)"', command or "")
+    return Path(match.group(1)) if match else None
+
+
 def refresh(config_path: Path) -> None:
-    """Re-point an existing entry at this executable/config (e.g. after moving the app)."""
-    if enabled() and current() != launch_command(config_path):
+    """Follow the app if it was moved: re-point an existing entry at this executable,
+    but only when it starts this same config. Another instance (e.g. a copy with its
+    own config, or a test run) must never take over the user's startup entry."""
+    command = current()
+    registered = configured_path(command)
+    if registered is None or command == launch_command(config_path):
+        return
+    try:
+        same = registered.resolve() == Path(config_path).resolve()
+    except OSError:
+        same = False
+    if same:
         enable(config_path)

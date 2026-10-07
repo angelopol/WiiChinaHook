@@ -288,7 +288,7 @@ The right stick can use one of three motion sources:
   centre when the turn stops.
 - **IR pointer.**
 
-All three share the IR range and the dead zone. The Nunchuk has no gyroscope. Configs
+Both MotionPlus sources share a **gyro dead zone**, which ignores small hand movements around the centre. The IR pointer and the Nunchuk stick use the regular dead zone. The Nunchuk has no gyroscope. Configs
 from before this version that used the speed source switch to aim automatically. Games' rumble is forwarded to the
 Wiimote. The configuration is stored under `"gamepad"` in `config.local.json`.
 
@@ -340,6 +340,17 @@ Dolphin/Cemu or another DSU client (step-by-step: [Dolphin](docs/guides/dolphin.
 [Cemu](docs/guides/cemu.md)). Input is sent only while a DSU mode is active (mode 2 by
 default). Do not enable Dolphin's passthrough on the same adapter at the same time. DSU
 is not a real Bluetooth Wiimote: each emulator maps the inputs it supports.
+
+**Extra DSU servers** (on by default; switches in the DSU mode, ports in *Settings →
+Network*, 0 = off):
+
+- **Nunchuk motion** (`26762`): the Nunchuk's accelerometer, for Dolphin's *Extension
+  Motion Input*.
+- **IR pointer** (`26763`): the camera pointer as an absolute right stick, plus `Cross`
+  while the bar is out of sight, for Dolphin's *Point*.
+
+A single DSU slot carries only one motion sensor and no IR, hence the extra servers.
+How to link them: [Dolphin guide](docs/guides/dolphin.md).
 
 - Same button mapping as before.
 - Nunchuk: left stick, C → L1 and Z → L2.

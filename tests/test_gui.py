@@ -204,7 +204,11 @@ def test_gamepad_tab_shows_the_dsu_mode_and_its_guides(tmp_path):
     assert tab.mode_type.value == "dsu" and "Dolphin" in tab.guide.value and "Mandos" in tab.guide.value
     tab.on_status({"mode": 2, "problems": {}})
     assert tab.view_hint.value == controller.t("gp_view_dsu")
-    assert tab.collect() == {"type": "dsu", "name": "DSU"}
+    assert tab.collect() == {"type": "dsu", "name": "DSU", "nunchuk_server": True, "ir_server": True,
+                             "ir_range": 0.5}
+    tab.dsu_switches["ir_server"].value = False                 # the IR server can be switched off
+    tab.dsu_ir_range.value = "0.7"
+    assert tab.collect()["ir_server"] is False and tab.collect()["ir_range"] == 0.7
     tab.editing = 1
     tab.render_editor()
     assert tab.mode_type.value == "xbox" and "A" in tab.combos
@@ -220,10 +224,46 @@ def test_speaker_settings_round_trip():
     controller.t = Translator("es")
     controller.config = AppConfig(speaker=validate_speaker(
         {"enabled": True, "volume": 0.3, "events": {"mode": "sonidos/modo.wav", "low_battery": None}}))
-    controls = controller.build_speaker_settings()
-    assert controls[0].value == "Altavoz (opcional)"
+    card = controller.build_speaker_settings()
+    assert card.content.controls[0].controls[1].value == "Altavoz (opcional)"   # section title
     choice, path = controller.sound_rows["mode"]
     assert choice.value == "custom" and path.visible and path.value == "sonidos/modo.wav"
     assert controller.sound_rows["low_battery"][0].value == "off"
     assert controller.speaker_form() == {"enabled": True, "volume": 0.3, "events": {
         "connect": "chime", "mode": "sonidos/modo.wav", "low_battery": None}}
+
+
+def test_log_export_text_has_a_header_and_every_line():
+    import logging
+    pytest.importorskip("flet")
+    from wiichinahook.gui.app import LogBuffer
+    buffer = LogBuffer(size=3)
+    for i in range(5):
+        buffer.emit(logging.LogRecord("wiichinahook", logging.INFO, __file__, 1, f"line {i}", None, None))
+    text = buffer.export_text("0.3.0")
+    assert text.startswith("# WiiChinaHook 0.3.0 log") and text.endswith("line 4\n")
+    assert "line 1" not in text and text.count("line ") == 3     # only the buffered (latest) lines
+
+
+def test_pc_editor_round_trip_and_mouse_claims():
+    pytest.importorskip("flet")
+    from types import SimpleNamespace
+    from wiichinahook.gamepad.mapping import validate_template
+    from wiichinahook.gui.gamepad_tab import GamepadTab
+    controller = SimpleNamespace(t=Translator("es"), config=AppConfig(), page=None)
+    tab = GamepadTab(controller)
+    tab.editing = 3                                       # default mode 3 is the PC mode
+    tab.build()
+    assert tab.mode_type.value == "pc"
+    editor = tab.pc_editor
+    assert editor.rows["wm_1"].text.value == "alt+tab" and editor.rows["wm_a"].choice.value == "left"
+    editor.rows["wm_1"].text.value = "ctrl+9"
+    editor.rows["wm_2"].kind.value = "toggle"
+    editor.rows["wm_2"].text.value = "system:mute | system:mute"
+    editor.source.value = "wm_dpad"                        # the D-pad now moves the mouse
+    editor.apply_claims()
+    assert editor.rows["wm_up"].kind.disabled and not editor.rows["wm_a"].kind.disabled
+    result = validate_template(tab.collect())
+    assert result["mouse"]["source"] == "wm_dpad" and result["buttons"]["wm_up"] is None
+    assert result["buttons"]["wm_1"] == "keys:ctrl+9"
+    assert result["buttons"]["wm_2"] == "toggle:system:mute | system:mute"

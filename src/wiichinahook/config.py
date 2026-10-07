@@ -48,6 +48,8 @@ class WiimoteConfig:
 class DsuConfig:
     host: str = "127.0.0.1"
     port: int = 26760
+    nunchuk_port: int = 26762   # Nunchuk motion server; 0 = not opened
+    ir_port: int = 26763        # IR pointer server; 0 = not opened
 
 
 @dataclass(frozen=True)
@@ -105,6 +107,16 @@ class AppConfig:
     speaker: dict = field(default_factory=lambda: validate_speaker(None))
 
 
+def dsu_config(data: dict) -> DsuConfig:
+    ports = [int(data.get(k, d)) for k, d in (("port", 26760), ("nunchuk_port", 26762), ("ir_port", 26763))]
+    if not 1 <= ports[0] <= 65535 or not all(0 <= p <= 65535 for p in ports[1:]):
+        raise ValueError("Invalid DSU port")
+    used = [p for p in ports if p]
+    if len(set(used)) != len(used):
+        raise ValueError("The DSU servers need different ports")
+    return DsuConfig(data.get("host", "127.0.0.1"), *ports)
+
+
 def load_config(path: str | Path) -> AppConfig:
     path = Path(path)
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -145,7 +157,7 @@ def load_config(path: str | Path) -> AppConfig:
     return AppConfig(
         mode,
         DongleConfig(vid, pid, transport),
-        remotes, DsuConfig(dsu.get("host", "127.0.0.1"), int(dsu.get("port", 26760))),
+        remotes, dsu_config(dsu),
         ApiConfig(api.get("host", "127.0.0.1"), int(api.get("port", 26761))),
         path.parent / data.get("state_dir", ".wiichinahook"),
         bool(data.get("ir", True)), bool(data.get("motionplus", True)), slots,
@@ -175,7 +187,8 @@ def config_to_dict(config: AppConfig, base_dir: Path | None = None) -> dict:
         "mode": config.mode,
         "dongle": dongle,
         "wiimotes": remotes,
-        "dsu": {"host": config.dsu.host, "port": config.dsu.port},
+        "dsu": {"host": config.dsu.host, "port": config.dsu.port, "nunchuk_port": config.dsu.nunchuk_port,
+                "ir_port": config.dsu.ir_port},
         "api": {"host": config.api.host, "port": config.api.port},
         "state_dir": state_dir.as_posix(),
         "ir": config.ir,

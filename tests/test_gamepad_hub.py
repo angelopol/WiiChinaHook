@@ -188,3 +188,27 @@ def test_xbox_pad_skips_unchanged_updates():
     state.rx = 0.0001                                # tiny gyro motion still goes out
     pad.send(state)
     assert calls.count("update") == 2 and calls.count("press_button") == 1
+
+
+async def test_dsu_options_follow_the_dsu_mode_even_while_another_plays():
+    hub = GamepadHub(None, pad_factory=FakePad)
+    assert hub.mode == 1 and hub.dsu_options["nunchuk_server"] is True    # from mode 2 (DSU)
+    hub.set_config({"version": 3, "mode": 1, "modes": [None, {"type": "dsu", "ir_server": False}, None, None]})
+    assert hub.dsu_options["ir_server"] is False
+    hub.set_config({"version": 3, "mode": 1, "modes": [None, None, None, None]})
+    assert hub.dsu_options is None                                         # no DSU mode: extra servers off
+    hub.close()
+
+
+def test_startup_mode_fixed_or_last_active(tmp_path):
+    from dataclasses import replace
+    from wiichinahook.app import read_last_mode, save_last_mode, startup_gamepad
+    from wiichinahook.config import AppConfig
+    config = replace(AppConfig(), state_dir=tmp_path)
+    assert startup_gamepad(config)["mode"] == 1                  # nothing saved yet: the config's
+    save_last_mode(tmp_path, 3)
+    assert read_last_mode(tmp_path) == 3 and startup_gamepad(config)["mode"] == 3   # last active
+    fixed = replace(config, gamepad=dict(config.gamepad, startup_mode=2))
+    assert startup_gamepad(fixed)["mode"] == 2                   # a fixed startup mode wins
+    (tmp_path / "gamepad_mode.json").write_text("{broken", encoding="utf-8")
+    assert read_last_mode(tmp_path) is None and startup_gamepad(config)["mode"] == 1

@@ -73,6 +73,8 @@ def form_from_config(config: AppConfig) -> dict:
         "transport": config.dongle.transport or "",
         "dsu_host": config.dsu.host,
         "dsu_port": str(config.dsu.port),
+        "dsu_nunchuk_port": str(config.dsu.nunchuk_port),
+        "dsu_ir_port": str(config.dsu.ir_port),
         "api_port": str(config.api.port),
         "ir": config.ir,
         "motionplus": config.motionplus,
@@ -97,8 +99,16 @@ def config_from_form(base: AppConfig, form: dict) -> AppConfig:
             raise ValueError(key) from None
         if not 1 <= ports[key] <= 65535:
             raise ValueError(key)
-    if ports["dsu_port"] == ports["api_port"]:
-        raise ValueError("api_port")
+    for key, default in (("dsu_nunchuk_port", base.dsu.nunchuk_port), ("dsu_ir_port", base.dsu.ir_port)):
+        try:
+            ports[key] = int(form.get(key, default) or 0)  # 0 = server off
+        except (TypeError, ValueError):
+            raise ValueError(key) from None
+        if not 0 <= ports[key] <= 65535:
+            raise ValueError(key)
+    used = [p for p in ports.values() if p]
+    if len(set(used)) != len(used):
+        raise ValueError("api_port" if ports["dsu_port"] == ports["api_port"] else "dsu_nunchuk_port/dsu_ir_port")
     host = form["dsu_host"].strip()
     if not host:
         raise ValueError("dsu_host")
@@ -106,7 +116,7 @@ def config_from_form(base: AppConfig, form: dict) -> AppConfig:
         base,
         mode=form["mode"],
         dongle=DongleConfig(vid, pid, form["transport"].strip() or None),
-        dsu=DsuConfig(host, ports["dsu_port"]),
+        dsu=DsuConfig(host, ports["dsu_port"], ports["dsu_nunchuk_port"], ports["dsu_ir_port"]),
         api=ApiConfig(base.api.host, ports["api_port"]),
         ir=bool(form["ir"]),
         motionplus=bool(form["motionplus"]),

@@ -20,20 +20,11 @@ from dataclasses import dataclass, field
 import math
 
 from ..orientation import heading, rotate
+from .inputs import (AXIS_GESTURES, BUTTON_SOURCES, DIRECTIONS, GESTURE_SOURCES, SHAKE_AXES,  # noqa: F401
+                     ShakeDetector, ir_pointer, ir_stick)
+from .pc import PC_TEMPLATE, pc_problems, validate_pc_template
 
-BUTTON_SOURCES = {
-    "wm_up": 0x0800, "wm_down": 0x0400, "wm_left": 0x0100, "wm_right": 0x0200,
-    "wm_a": 0x0008, "wm_b": 0x0004, "wm_minus": 0x0010, "wm_plus": 0x1000,
-    "wm_home": 0x0080, "wm_1": 0x0002, "wm_2": 0x0001,
-    "nc_c": None, "nc_z": None,           # from the Nunchuk state
-}
-DIRECTIONS = ("left", "right", "up", "down", "forward", "back")
-# A shake along an axis, either direction (testing showed the sign of a quick shake
-# cannot be told apart reliably: every shake has a rebound). x = sideways,
-# y = forward/back, z = up/down. Directional shakes stay accepted for old configs.
-SHAKE_AXES = ("x", "y", "z")
-AXIS_GESTURES = tuple(f"{device}_shake_{axis}" for device in ("wm", "nc") for axis in SHAKE_AXES)
-GESTURE_SOURCES = AXIS_GESTURES + tuple(f"{device}_shake_{d}" for device in ("wm", "nc") for d in DIRECTIONS)
+
 # gyro_angle: the remote's aim (orientation), so the stick holds where it points;
 # gyro: rotation speed, so the stick springs back to centre when the turn stops.
 STICK_SOURCES = ("nc_stick", "gyro_angle", "gyro", "ir")
@@ -64,15 +55,19 @@ GAME_TEMPLATE = {
     # read uncalibrated ((raw - 512) / 200), so its thresholds absorb its real scale.
     "shake_wm": [1.3, 1.3, 1.3],
     "shake_nc": [1.3, 1.3, 1.3],
-    "deadzone": 0.08,
+    # A button that belongs to a combination waits this long before firing alone, so
+    # members pressed a few ms apart still make the combination. Others never wait.
+    "chord_window_ms": 50,
+    "deadzone": 0.08,          # Nunchuk stick and IR pointer
+    "gyro_deadzone": 0.03,     # gyro aim/speed: hides hand tremor around the centre
 }
 
 # DSU mode: no virtual Xbox controller; the remotes go to DSU clients (Dolphin, Cemu)
 # with all their features. Other modes keep DSU clients connected but idle.
-DSU_TEMPLATE = {"type": "dsu", "name": "DSU"}
-CONFIG_VERSION = 3
-DEFAULT_CONFIG = {"version": CONFIG_VERSION, "modifier": "wm_b", "mode": 1,
-                  "modes": [copy.deepcopy(GAME_TEMPLATE), copy.deepcopy(DSU_TEMPLATE), None, None]}
+# The extra DSU servers (dsu.py) carry what one DSU slot cannot: the Nunchuk's
+# accelerometer and the IR pointer. On by default; off = their slots disconnected.
+DSU_TEMPLATE = {"type": "dsu", "name": "DSU", "nunchuk_server": True, "ir_server": True, "ir_range": 0.5}
+CONFIG_VERSION = 4
 
 
 def mode_type(template):
@@ -94,9 +89,19 @@ def validate_template(template: dict) -> dict:
         raise ValueError("A mode template must be an object or null")
     kind = template.get("type", "xbox")
     if kind == "dsu":
-        return {"type": "dsu", "name": str(template.get("name") or "DSU")[:40]}
+        result = copy.deepcopy(DSU_TEMPLATE)
+        result["name"] = str(template.get("name") or "DSU")[:40]
+        for key in ("nunchuk_server", "ir_server"):
+            result[key] = bool(template.get(key, True))
+        ir_range = float(template.get("ir_range", DSU_TEMPLATE["ir_range"]))
+        if not 0.05 <= ir_range <= 1.0:
+            raise ValueError("ir_range must be 0.05..1")
+        result["ir_range"] = ir_range
+        return result
+    if kind == "pc":
+        return validate_pc_template(template)
     if kind != "xbox":
-        raise ValueError("Mode type must be xbox or dsu")
+        raise ValueError("Mode type must be xbox, dsu or pc")
     result = copy.deepcopy(GAME_TEMPLATE)
     if "shake_g" in template:  # configs from before per-axis sensitivity
         result["shake_wm"] = result["shake_nc"] = [template["shake_g"]] * 3
@@ -123,11 +128,15 @@ def validate_template(template: dict) -> dict:
             raise ValueError(f"Invalid source for {target}: {source}")
     for key, low, high in (("angle_full_deg", 5, 90), ("angle_full_deg_y", 5, 90),
                            ("gyro_full_dps", 20, 2000), ("gyro_full_dps_y", 20, 2000), ("ir_range", 0.05, 1.0),
-                           ("deadzone", 0.0, 0.5)):
+                           ("deadzone", 0.0, 0.5), ("gyro_deadzone", 0.0, 0.5)):
         value = float(result[key])
         if not low <= value <= high:
             raise ValueError(f"{key} must be {low}..{high}")
         result[key] = value
+    window = result["chord_window_ms"]
+    if isinstance(window, bool) or not isinstance(window, (int, float)) or not 0 <= window <= 300:
+        raise ValueError("chord_window_ms must be 0..300")
+    result["chord_window_ms"] = int(round(window))
     for key in ("shake_wm", "shake_nc"):
         values = result[key]
         if not isinstance(values, (list, tuple)) or len(values) != 3:
@@ -154,6 +163,8 @@ def validate_config(config: dict | None) -> dict:
     version = int(config.get("version", 1))
     if version < 2 and modes[1] is None and "dsu" not in map(mode_type, modes):
         modes[1] = copy.deepcopy(DSU_TEMPLATE)   # mode 2 became the DSU mode
+    if version < 4 and modes[2] is None and "pc" not in map(mode_type, modes):
+        modes[2] = copy.deepcopy(PC_TEMPLATE)    # mode 3 became the PC mode
     if version < 3:
         # The rate-based "gyro" stick sprang back to centre when the turn stopped; the
         # aim-based one holds the position, which is what a "gyro stick" was meant to be.
@@ -162,7 +173,11 @@ def validate_config(config: dict | None) -> dict:
                 for target, source in template["sticks"].items():
                     if source == "gyro":
                         template["sticks"][target] = "gyro_angle"
-    return {"version": CONFIG_VERSION, "modifier": modifier, "mode": mode, "modes": modes}
+    startup = config.get("startup_mode")
+    if startup is not None and (isinstance(startup, bool) or startup not in (1, 2, 3, 4)):
+        raise ValueError("startup_mode must be 1..4 or null (last active mode)")
+    return {"version": CONFIG_VERSION, "modifier": modifier, "mode": mode, "startup_mode": startup,
+            "modes": modes}
 
 
 def required_capability(source):
@@ -179,6 +194,8 @@ def required_capability(source):
 
 def unavailable_bindings(template: dict | None, capabilities: dict) -> list[str]:
     """'TARGET: source (needs capability)' for bindings this remote cannot drive."""
+    if mode_type(template) == "pc":
+        return pc_problems(template, capabilities)
     if mode_type(template) != "xbox":
         return []
     problems = []
@@ -213,55 +230,6 @@ def _deadzone(x, y, zone):
     return max(-1.0, min(1.0, x * scale)), max(-1.0, min(1.0, y * scale))
 
 
-class ShakeDetector:
-    """Short pulses when the dynamic acceleration (gravity removed by a slow
-    low-pass) exceeds a threshold along an axis; one direction per axis per shake."""
-    PULSE, REFRACTORY, TAU = 0.15, 0.35, 0.25
-
-    def __init__(self):
-        self.gravity = None
-        self.last_t = None
-        self.active_until = {}
-        self.blocked_until = {}
-        self.fired = []      # axes fired since last read (for the GUI's live test)
-        self.peak = [0.0, 0.0, 0.0]
-
-    def update(self, accel, t, thresholds):
-        if accel is None:
-            self.gravity = None
-            return set()
-        if self.gravity is None:
-            self.gravity, self.last_t = list(accel), t
-            return set()
-        dt = max(0.0, min(0.1, t - self.last_t))
-        self.last_t = t
-        alpha = dt / (self.TAU + dt) if dt else 0.0
-        dynamic = [a - g for a, g in zip(accel, self.gravity)]
-        self.gravity = [g + alpha * (a - g) for a, g in zip(accel, self.gravity)]
-        # Raw axes: X + = left, Y + = back, Z + = buttons face (up when flat).
-        self.peak = [abs(d) for d in dynamic]
-        for axis, (positive, negative) in enumerate((("left", "right"), ("back", "forward"), ("up", "down"))):
-            if t < self.blocked_until.get(axis, 0) or abs(dynamic[axis]) < thresholds[axis]:
-                continue
-            direction = positive if dynamic[axis] > 0 else negative
-            self.active_until[direction] = t + self.PULSE
-            self.active_until[SHAKE_AXES[axis]] = t + self.PULSE  # direction-agnostic
-            self.fired.append((SHAKE_AXES[axis], round(abs(dynamic[axis]), 2)))
-            self.blocked_until[axis] = t + self.REFRACTORY
-        return {d for d, until in self.active_until.items() if t < until}
-
-
-def ir_pointer(points):
-    visible = [p for p in points or () if p]
-    if not visible:
-        return None
-    if len(visible) >= 2:
-        a, b = max(((p, q) for i, p in enumerate(visible) for q in visible[i + 1:]),
-                   key=lambda pq: (pq[0]["x"] - pq[1]["x"]) ** 2 + (pq[0]["y"] - pq[1]["y"]) ** 2)
-        return (a["x"] + b["x"]) / 2, (a["y"] + b["y"]) / 2
-    return visible[0]["x"], visible[0]["y"]
-
-
 class MappingEngine:
     """One per remote. process() turns a WiimoteState dict into an XboxState and an
     optional global mode request (modifier + arrow)."""
@@ -272,6 +240,10 @@ class MappingEngine:
         self.wm_shake = ShakeDetector()
         self.nc_shake = ShakeDetector()
         self._compiled_for, self._compiled = None, None
+        self.since = {}                # source -> when it became active (chord window)
+        self.waiting = set()           # chord members held back last report
+        self.latched = set()           # members of a fired combination, until released
+        self.taps = {}                 # quick taps of chord members -> pulse end
         self.aim_reference = None      # heading that counts as "centre" for gyro_angle
         self.aim_key = None
 
@@ -316,15 +288,16 @@ class MappingEngine:
 
         # Combinations win over their members (C+Z = Select must not also press LB and
         # LT), and longer combinations over shorter overlapping ones.
-        chords, buttons = self.compiled(template)
+        chords, buttons, members_of_chords = self.compiled(template)
         consumed, firing = set(), set()
         for chord, members in chords:
             if members <= active and not consumed & members:
                 firing.add(chord)
                 consumed |= members
+        alone = self.individual(active, consumed, members_of_chords, t, template["chord_window_ms"] / 1000)
         out = XboxState()
         for target, source, chord in buttons:
-            on = source in firing if chord else (source in active and source not in consumed)
+            on = source in firing if chord else source in alone
             if not on:
                 continue
             if target == "LT":
@@ -341,14 +314,37 @@ class MappingEngine:
                 out.rx, out.ry = x, y
         return out, mode_request
 
+    TAP_PULSE = 0.06  # s: a quick tap of a chord member still reaches the game
+
+    def individual(self, active, consumed, members_of_chords, t, window):
+        """Sources that fire on their own this report. A chord member waits `window`
+        after being pressed (the rest of its combination may follow); one released
+        before that, without making a combination, is sent as a short tap. Members of
+        a combination stay used until released (releasing C before Z after C+Z must
+        not press Z's own button)."""
+        for source in active:
+            self.since.setdefault(source, t)
+        for source in [s for s in self.since if s not in active]:
+            del self.since[source]
+            if source in self.waiting and source not in self.latched:
+                self.taps[source] = t + self.TAP_PULSE      # tapped and released in the window
+        self.latched = (self.latched & active) | consumed
+        free = active - self.latched
+        self.waiting = {s for s in free if s in members_of_chords and t - self.since[s] < window}
+        self.taps = {s: end for s, end in self.taps.items() if t < end}
+        return (free - self.waiting) | set(self.taps)
+
     def compiled(self, template):
-        """Chords (longest first, as member sets) and the bound buttons of a template,
-        rebuilt only when the template object changes (configs are replaced, not edited)."""
+        """Chords (longest first, as member sets), the bound buttons of a template and
+        every source used in a chord; rebuilt only when the template object changes
+        (configs are replaced, not edited)."""
         if self._compiled_for is not template:
             chords = sorted({s for s in template["buttons"].values() if is_chord(s)},
                             key=lambda s: -len(chord_members(s)))
-            self._compiled = ([(c, frozenset(chord_members(c))) for c in chords],
-                              [(t, s, is_chord(s)) for t, s in template["buttons"].items() if s is not None])
+            members = [(c, frozenset(chord_members(c))) for c in chords]
+            self._compiled = (members,
+                              [(t, s, is_chord(s)) for t, s in template["buttons"].items() if s is not None],
+                              frozenset().union(*(m for _, m in members)))
             self._compiled_for = template
         return self._compiled
 
@@ -372,7 +368,7 @@ class MappingEngine:
         # heading() grows counter-clockwise: turning right is negative -> stick right.
         x = -math.degrees(turn) / template["angle_full_deg"]
         y = math.degrees(elevation) / template["angle_full_deg_y"]
-        return _deadzone(max(-1.0, min(1.0, x)), max(-1.0, min(1.0, y)), template["deadzone"])
+        return _deadzone(max(-1.0, min(1.0, x)), max(-1.0, min(1.0, y)), template["gyro_deadzone"])
 
     def stick(self, source, state, template):
         zone = template["deadzone"]
@@ -387,14 +383,16 @@ class MappingEngine:
                 return 0.0, 0.0
             yaw, _roll, pitch = gyro
             # Turning right (yaw -) moves right; tip up (pitch -) moves up.
-            return _deadzone(-yaw / template["gyro_full_dps"], -pitch / template["gyro_full_dps_y"], zone)
+            return _deadzone(-yaw / template["gyro_full_dps"], -pitch / template["gyro_full_dps_y"],
+                             template["gyro_deadzone"])
         if source == "ir":
-            pointer = ir_pointer(state.get("ir"))
-            if pointer is None:
-                return 0.0, 0.0
-            span = template["ir_range"]
-            # The camera image is mirrored: pointing right moves the dots left.
-            x = (511.5 - pointer[0]) / (511.5 * span)
-            y = (pointer[1] - 383.5) / (383.5 * span)
-            return _deadzone(max(-1.0, min(1.0, x)), max(-1.0, min(1.0, y)), zone)
+            stick = ir_stick(state.get("ir"), template["ir_range"])
+            return (0.0, 0.0) if stick is None else _deadzone(stick[0], stick[1], zone)
         return 0.0, 0.0
+
+
+# startup_mode: the mode the service starts in (1-4), or None for the last active one.
+# Mode 1 = Xbox game template, 2 = DSU (Dolphin/Cemu), 3 = PC (mouse and keyboard).
+DEFAULT_CONFIG = {"version": CONFIG_VERSION, "modifier": "wm_b", "mode": 1, "startup_mode": None,
+                  "modes": [copy.deepcopy(GAME_TEMPLATE), copy.deepcopy(DSU_TEMPLATE),
+                            copy.deepcopy(PC_TEMPLATE), None]}

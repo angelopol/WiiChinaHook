@@ -13,6 +13,7 @@ import contextlib
 from dataclasses import asdict, replace
 import json
 import logging
+import queue
 import threading
 import time
 
@@ -54,7 +55,11 @@ def bar_devices(enumerate_hid=None):
 
 class BarLink:
     """One DolphinBar slot. Acts as the HID interrupt channel and the connection
-    for WiimoteSession; a reader thread feeds input reports into the event loop."""
+    for WiimoteSession; a reader thread feeds input reports into the event loop and a
+    writer thread sends output reports in order. A HID write is a blocking USB
+    transfer: done on the event loop, four remotes streaming speaker audio (~300
+    writes/s) would stall input and DSU. Each slot is its own HID device, so the four
+    writers run in parallel; one handle never gets concurrent writes (hidapi forbids it)."""
     psm = 0x13
 
     def __init__(self, path, loop, opener=None):
@@ -68,8 +73,11 @@ class BarLink:
         self.handlers = {}
         self.closed = False
         self.stop = threading.Event()
+        self.outbox = queue.SimpleQueue()
         self.thread = threading.Thread(target=self.reader, name=f"dolphinbar-{path!r}", daemon=True)
+        self.writer = threading.Thread(target=self.write_loop, name=f"dolphinbar-out-{path!r}", daemon=True)
         self.thread.start()
+        self.writer.start()
 
     def reader(self):
         while not self.stop.is_set():
@@ -99,12 +107,18 @@ class BarLink:
         # data carries the 0xA2 output-transaction header used over Bluetooth.
         if self.closed:
             raise ReportError("DolphinBar slot is closed")
-        report = bytes(data[1:]).ljust(REPORT_SIZE, b"\0")
-        try:
-            self.device.write(report)
-        except (OSError, ValueError) as exc:
-            self.loop.call_soon(self.lost, f"DolphinBar write failed: {exc}")
-            raise ReportError(str(exc)) from exc
+        self.outbox.put(bytes(data[1:]).ljust(REPORT_SIZE, b"\0"))
+
+    def write_loop(self):
+        while True:
+            report = self.outbox.get()
+            if report is None:                    # close(): everything before it was sent
+                return
+            try:
+                self.device.write(report)
+            except (OSError, ValueError) as exc:
+                self.post(self.lost, f"DolphinBar write failed: {exc}")
+                return
 
     def lost(self, reason):
         if not self.closed:
@@ -116,9 +130,11 @@ class BarLink:
             return
         self.closed = True
         self.stop.set()
-        # Never close the hid handle while the reader thread may be inside read().
-        if threading.current_thread() is not self.thread:
-            self.thread.join(1.0)
+        self.outbox.put(None)                     # let queued reports (e.g. rumble off) go out
+        # Never close the hid handle while a thread may be inside read() or write().
+        for thread in (self.writer, self.thread):
+            if threading.current_thread() is not thread:
+                thread.join(1.0)
         handlers = self.handlers.get("close", [])
         self.handlers.clear()
         for handler in handlers:

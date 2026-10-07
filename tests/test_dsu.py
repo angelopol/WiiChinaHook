@@ -156,3 +156,39 @@ def test_idle_slots_are_sent_at_a_low_rate(server, monkeypatch):
     for _ in range(50):
         server.send_state(s)                 # DSU mode: every report goes out
     assert len(sent) == 51
+
+
+def test_nunchuk_server_sends_the_nunchuk_accelerometer_with_its_own_mac():
+    from wiichinahook.dsu import NunchukDsuServer
+    server = NunchukDsuServer("127.0.0.1", 0)
+    try:
+        s = WiimoteState("00:11:22:33:44:55", 1, True)
+        s.buttons, s.accel_g, s.gyro_dps = 0x0008, (0.0, 0.0, 1.0), (50.0, 0.0, 0.0)
+        s.nunchuk = {"stick": [1, 1], "c": True, "z": True, "accel_raw": [612, 512, 712]}
+        packet = server._pad_data_payload(s)
+        assert packet[11] == 1 and packet[4] == 0x10 ^ 0x00     # connected; MAC 10:11:22:...
+        assert struct.unpack_from("<fff", packet, 56) == (0.5, -1.0, -0.0)
+        assert packet[16:20] == bytes(4) and packet[20:24] == bytes([0x80]) * 4   # motion only
+        assert struct.unpack_from("<fff", packet, 68) == (0.0, 0.0, 0.0)
+        server.enabled = False                                  # switched off: slot disconnected
+        assert server._pad_data_payload(s)[11] == 0 and server._shared_payload(1, s)[1] == 0
+    finally:
+        server.close()
+
+
+def test_ir_server_holds_the_pointer_and_flags_ir_lost(monkeypatch):
+    from wiichinahook.dsu import IrDsuServer
+    server = IrDsuServer("127.0.0.1", 0)
+    try:
+        s = WiimoteState("00:11:22:33:44:55", 0, True)
+        s.ir = [{"x": 300, "y": 384, "size": 2}, {"x": 400, "y": 384, "size": 2}, None, None]
+        packet = server._pad_data_payload(s)             # bar left of centre = pointing right
+        assert packet[22] > 200 and abs(packet[23] - 128) <= 1
+        assert not packet[17] & 0x40 and packet[36] == 1  # visible: no Cross, touch 1 active
+        s.ir = [None] * 4
+        monkeypatch.setattr(IrDsuServer, "LOST_AFTER", 0.0)
+        lost = server._pad_data_payload(s)
+        assert lost[22] == packet[22]                     # holds the last position
+        assert lost[17] & 0x40 and lost[36] == 0          # Cross = IR lost
+    finally:
+        server.close()

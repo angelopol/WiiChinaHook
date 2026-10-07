@@ -103,3 +103,56 @@ def test_reference_yaw_points_a_flat_remote_at_the_screen():
 def test_users_guided_pose_check_readings(raw_accel, axis, expected):
     # Accelerometer readings from the user's guided check on 2026-10-06.
     assert close(rotate(tilt_from_accel(raw_accel), axis), expected, 0.25)
+
+
+def posed(right_deg=0.0, up_deg=0.0, roll_deg=0.0):
+    """Body->world: turned right, tip raised, then rolled about the tip."""
+    return multiply(multiply(from_axis_angle((0.0, 0.0, 1.0), math.radians(-right_deg)),
+                             from_axis_angle((1.0, 0.0, 0.0), math.radians(up_deg))),
+                    from_axis_angle((0.0, 1.0, 0.0), math.radians(roll_deg)))
+
+
+def angles(q):
+    tip, side = rotate(q, (0.0, 1.0, 0.0)), rotate(q, (1.0, 0.0, 0.0))
+    return (math.degrees(math.atan2(-tip[0], tip[1])), math.degrees(math.asin(tip[2])),
+            math.degrees(math.asin(-side[2])))   # heading (+ = left), pitch (+ = up), roll (+ = right down)
+
+
+def test_recenter_also_makes_the_current_pitch_the_neutral_grip():
+    from wiichinahook.orientation import tip_pitch
+    f = OrientationFilter()
+    f.q = posed(right_deg=30.0, up_deg=-15.0)          # held tipped down 15°, turned right
+    f.recenter()
+    heading, pitch, _ = angles(f.output(f.q))
+    assert heading == pytest.approx(0.0, abs=1e-6) and pitch == pytest.approx(0.0, abs=1e-6)
+    assert math.degrees(f.pitch_offset) == pytest.approx(-15.0)
+    f.q = posed(up_deg=-5.0)                           # raised 10° from the neutral grip
+    assert math.degrees(tip_pitch(f.output(f.q))) == pytest.approx(10.0, abs=1e-6)
+    f.q = posed(up_deg=-15.0, roll_deg=20.0)           # roll is left alone
+    assert angles(f.output(f.q))[2] == pytest.approx(angles(f.q)[2], abs=1e-6)
+    f.reset()                                          # survives a filter reset (e.g. MotionPlus re-init)
+    assert math.degrees(f.pitch_offset) == pytest.approx(-15.0)
+
+
+def test_pitch_neutral_is_skipped_sideways_and_limited():
+    f = OrientationFilter()
+    f.q = multiply(posed(up_deg=20.0), from_axis_angle((0.0, 1.0, 0.0), math.radians(90)))  # on its side
+    f.recenter()
+    assert f.pitch_offset == 0.0                       # sideways: tilting is steering, keep gravity level
+    f.q = posed(up_deg=50.0)                           # recalibrated pointing steeply up
+    f.recenter()
+    assert math.degrees(f.pitch_offset) == pytest.approx(45.0)
+
+
+def test_recenter_without_motionplus_uses_the_accelerometer():
+    from wiichinahook.wiimote import ReportParser
+    f = OrientationFilter()
+    s = math.sin(math.radians(15.0))
+    f.recenter(accel_g=(0.0, s, math.cos(math.radians(15.0))))   # raw Y + = tip down (back up)
+    assert math.degrees(f.pitch_offset) == pytest.approx(-15.0, abs=0.5)
+    parser = ReportParser()
+    parser.orientation.pitch_offset = f.pitch_offset
+    accel = (0, int(512 + 256 * s), int(512 + 256 * math.cos(math.radians(15.0))))
+    report = bytes([0xA1, 0x31, 0x00, 0x00, 128, accel[1] >> 2, accel[2] >> 2])
+    assert parser.feed(report)
+    assert abs(angles(parser.state.orientation)[1]) < 1.5           # tilt-only output starts level

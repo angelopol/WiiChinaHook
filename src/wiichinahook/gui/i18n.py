@@ -6,6 +6,11 @@ LANGUAGES = {"en": "English", "es": "Español"}
 TEXT = {
     "en": {
         "title": "WiiChinaHook",
+        "subtitle": "Wiimotes for Dolphin, Cemu and PC games",
+        "settings_network": "Network",
+        "settings_network_hint": "DSU server for Dolphin/Cemu and the local control API (loopback only).",
+        "settings_sensors": "Sensors",
+        "settings_save_hint": "Saves connection, network and sensors; restart the service to apply.",
         "tab_controllers": "Controllers",
         "tab_settings": "Settings",
         "tab_log": "Log",
@@ -85,6 +90,8 @@ TEXT = {
         "calibration": "Calibration",
         "adapter": "Adapter",
         "clear_log": "Clear",
+        "log_export": "Save log…",
+        "log_saved": "Log saved to {path}",
         "pose": "Orientation",
         "recenter": "Recenter: the current pose becomes straight ahead (flat: tip to the screen; sideways: buttons to you)",
         "pose_gyro": "MotionPlus + gravity; heading drifts slowly, use Recenter",
@@ -149,8 +156,8 @@ TEXT = {
         "tab_gamepad": "Xbox controller",
         "gp_intro": "Each mode is shared by every connected Wiimote. An Xbox mode gives every remote its own "
                     "virtual Xbox controller (ViGEmBus); the DSU mode sends the remotes to DSU emulators (Dolphin, "
-                    "Cemu) with all their features; in the other modes DSU clients see the remotes but get no "
-                    "input. "
+                    "Cemu) with all their features; the PC mode turns them into mouse and keyboard; in the other "
+                    "modes DSU clients see the remotes but get no input. "
                     "Switch modes on the remote: hold the modifier and press an arrow, clockwise "
                     "(↑ 1, → 2, ↓ 3, ← 4); the remote rumbles the mode number.",
         "gp_active": "Active mode:",
@@ -169,6 +176,93 @@ TEXT = {
         "tray_open": "Open WiiChinaHook",
         "tray_mode": "Mode",
         "tray_exit": "Exit",
+        "gp_dsu_extra": "Extra DSU servers",
+        "gp_dsu_extra_hint": "One DSU slot carries a single motion sensor and no IR, so these servers send "
+                             "what is left: the Nunchuk's accelerometer and the IR pointer. Add each one as "
+                             "another server in Dolphin (see the guide). Off = their devices disappear.",
+        "gp_dsu_nunchuk_server": "Nunchuk motion server",
+        "gp_dsu_ir_server": "IR pointer server",
+        "gp_dsu_port": "UDP port {port} (Settings → Network)",
+        "gp_dsu_port_off": "Port 0: not opened (Settings → Network)",
+        "gp_dsu_nunchuk_binds": "Dolphin: Nunchuk → Extension Motion Input → Accelerometer = Accel Up/Down/…",
+        "gp_dsu_ir_binds": "Dolphin: Motion Simulation → Point = Right Y+/Y-/X-/X+, Hide = Cross (IR lost)",
+        "dsu_nunchuk_port": "Nunchuk DSU port",
+        "dsu_ir_port": "IR DSU port",
+        "dsu_extra_ports_hint": "Extra DSU servers for Nunchuk motion and the IR pointer (0 = off). They are "
+                                "switched on or off in the DSU mode's settings.",
+        "gp_startup_mode": "Mode on startup",
+        "gp_startup_last": "Last active mode",
+        "gp_startup_hint": "The mode the service starts in (e.g. when Windows starts): a fixed one, or the "
+                           "last one you used.",
+        "gp_cat_combos": "Combinations",
+        "gp_chord_window_ms": "Combination window (ms, 0–300)",
+        "gp_type_pc": "PC (mouse and keyboard)",
+        "gp_view_pc": "PC mode: the remotes drive the mouse and keyboard, no virtual Xbox controller.",
+        "pc_reset": "PC defaults",
+        "pc_claimed": "used by the mouse",
+        "pc_kind_none": "Nothing",
+        "pc_kind_keys": "Keys",
+        "pc_kind_mouse": "Mouse",
+        "pc_kind_system": "System",
+        "pc_kind_open": "Open",
+        "pc_kind_toggle": "Toggle",
+        "pc_hint_keys": "e.g. ctrl+9 or ctrl+shift+esc",
+        "pc_hint_open": "program, file or https:// address",
+        "pc_hint_toggle": "steps separated by |, e.g. ctrl+c | ctrl+v | system:mute",
+        "pc_mouse_left": "Left click",
+        "pc_mouse_right": "Right click",
+        "pc_mouse_middle": "Middle click",
+        "pc_mouse_scroll_up": "Scroll up",
+        "pc_mouse_scroll_down": "Scroll down",
+        "pc_system_mute": "Mute",
+        "pc_system_volume_up": "Volume up",
+        "pc_system_volume_down": "Volume down",
+        "pc_system_next_track": "Next track",
+        "pc_system_previous_track": "Previous track",
+        "pc_system_play_pause": "Play / pause",
+        "pc_system_stop": "Stop",
+        "pc_system_start_menu": "Start menu",
+        "pc_src_nc_up": "Nunchuk stick ↑",
+        "pc_src_nc_down": "Nunchuk stick ↓",
+        "pc_src_nc_left": "Nunchuk stick ←",
+        "pc_src_nc_right": "Nunchuk stick →",
+        "pc_mouse": "Mouse",
+        "pc_mouse_source": "Moves the mouse",
+        "pc_mouse_src_none": "Nothing",
+        "pc_mouse_src_gyro": "Gyroscope (turn the remote)",
+        "pc_mouse_src_ir": "IR pointer (point at the sensor bar)",
+        "pc_mouse_src_nc_stick": "Nunchuk stick",
+        "pc_mouse_src_wm_dpad": "Wiimote D-pad",
+        "pc_gyro_speed": "Gyro: pixels per degree",
+        "pc_gyro_deadzone": "Gyro dead zone (°/s)",
+        "pc_stick_speed": "Stick / D-pad: pixels per second",
+        "pc_stick_deadzone": "Stick dead zone (0–0.9)",
+        "pc_ir_range": "IR range (0.05–1)",
+        "pc_ir_smoothing": "IR smoothing (0–0.95)",
+        "pc_shake_g": "Shake strength",
+        "pc_mouse_hint": "Whatever moves the mouse cannot also be mapped: with the D-pad or the Nunchuk stick, "
+                         "their rows below are disabled. The gyroscope moves the mouse as you turn the remote "
+                         "(quick calibration removes drift); IR places it where you point; the stick and the "
+                         "D-pad push it, faster the longer you hold.",
+        "pc_help_title": "How to write actions",
+        "pc_help": "- **Keys**: names joined with `+`, as many as you like: `ctrl+9`, `ctrl+shift+esc`, `win+d`, "
+                   "`alt+f4`. They stay pressed while you hold the button.\n"
+                   "- Names: `a`–`z`, `0`–`9`, `f1`–`f24`, `ctrl`, `shift`, `alt`, `win`, `enter`, `esc`, `tab`, "
+                   "`space`, `backspace`, `delete`, `insert`, `home`, `end`, `pageup`, `pagedown`, `up`, `down`, "
+                   "`left`, `right`, `capslock`, `printscreen`, `menu`, `num0`–`num9`, `num_add`, `;` `=` `,` "
+                   "`-` `.` `/` `` ` `` `[` `\\` `]` `'`; right-hand modifiers `rctrl`, `rshift`, `ralt`.\n"
+                   "- **Open**: a program (`notepad`, `C:\\Games\\game.exe`), a file or a web address "
+                   "(`https://…`).\n"
+                   "- **Toggle**: steps separated by `|`; each press runs the next one, e.g. "
+                   "`system:mute | system:mute` or `ctrl+c | ctrl+v`. A step can be keys, `mouse:…`, "
+                   "`system:…` or `open:…`.\n"
+                   "- Games running as administrator only accept these keys if WiiChinaHook also runs as "
+                   "administrator.",
+        "pc_cat_wiimote": "Wiimote",
+        "pc_cat_nunchuk": "Nunchuk",
+        "pc_cat_shakes": "Shakes",
+        "pc_modifier_hint": "The mode modifier (B by default) fires its action when released, so modifier + "
+                            "arrow switches mode without clicking.",
         "gp_type": "Mode type",
         "gp_type_empty": "Empty (API only)",
         "gp_type_xbox": "Xbox controller",
@@ -177,8 +271,8 @@ TEXT = {
                         "accelerometer and MotionPlus gyroscope. There is nothing to remap here; bind the inputs "
                         "in the emulator (guides below).",
         "gp_dsu_table": "What each input is called in the emulator",
-        "gp_dsu_limits": "DSU has no IR camera and a single motion sensor per remote: the pointer comes from the "
-                         "gyroscope (bind Recenter in the emulator) and the Nunchuk's motion is not sent.",
+        "gp_dsu_limits": "This server carries the remote's buttons, Nunchuk stick/C/Z, accelerometer and gyro. "
+                         "The Nunchuk's motion and the IR pointer go through the extra servers below.",
         "gp_dsu_guide": "Guide",
         "gp_dsu_guide_missing": "Guide not found ({name}); it is in the repository's docs/guides folder.",
         "gp_view_dsu": "DSU mode: the remotes go to Dolphin/Cemu, no virtual Xbox controller.",
@@ -206,7 +300,26 @@ TEXT = {
         "gp_shake_live_idle": "shake a remote in a mode with an Xbox template…",
         "gp_ir_range": "IR range (0.05–1)",
         "gp_shake_g": "Shake strength (g)",
-        "gp_deadzone": "Dead zone (0–0.5)",
+        "gp_deadzone": "Dead zone: Nunchuk stick and IR (0–0.5)",
+        "gp_gyro_deadzone": "Gyro dead zone (0–0.5)",
+        "gp_active_title": "Active mode",
+        "gp_live_title": "Live view",
+        "gp_edit_title": "Edit mode",
+        "gp_empty_hint": "This mode is empty: no virtual Xbox controller and no DSU input, only the API. "
+                         "Pick a type to configure it.",
+        "gp_cat_face": "Face buttons",
+        "gp_cat_shoulders": "Bumpers and triggers",
+        "gp_cat_dpad": "D-pad",
+        "gp_cat_menu": "Menu and stick clicks",
+        "gp_cat_sticks": "Sticks",
+        "gp_cat_aim": "Gyro aim",
+        "gp_cat_speed": "Gyro speed",
+        "gp_cat_ir": "IR pointer",
+        "gp_sticks_hint": "What moves each stick. The dead zone here is for the Nunchuk stick and the IR pointer.",
+        "gp_aim_hint": "For \"MotionPlus aim\": degrees turned or tilted for a full deflection. The gyro dead "
+                       "zone ignores small hand movements around the centre (also used by gyro speed).",
+        "gp_speed_hint": "For \"MotionPlus speed\": rotation speed for a full deflection; the stick returns "
+                         "to centre when you stop turning.",
         "gp_save": "Save mapping",
         "gp_reset": "Default game layout",
         "gp_saved": "Mode {n} saved",
@@ -227,10 +340,17 @@ TEXT = {
         "nc_accel": "Nunchuk accelerometer (g)",
         "gp_combo_hint": "Each Xbox control fires with its first input, or with up to three inputs held "
                          "together (\"+\"): buttons and/or shakes, e.g. A + shake up. A combination does not "
-                         "also send its separate buttons, and longer combinations win.",
+                         "also send its separate buttons, and longer combinations win. A button that is "
+                         "part of a combination waits the combination window before firing alone, so its "
+                         "partners can be pressed a few ms later; other buttons never wait.",
     },
     "es": {
         "title": "WiiChinaHook",
+        "subtitle": "Wiimotes para Dolphin, Cemu y juegos de PC",
+        "settings_network": "Red",
+        "settings_network_hint": "Servidor DSU para Dolphin/Cemu y la API de control local (solo loopback).",
+        "settings_sensors": "Sensores",
+        "settings_save_hint": "Guarda conexión, red y sensores; reinicia el servicio para aplicarlos.",
         "tab_controllers": "Mandos",
         "tab_settings": "Ajustes",
         "tab_log": "Registro",
@@ -311,6 +431,8 @@ TEXT = {
         "calibration": "Calibración",
         "adapter": "Adaptador",
         "clear_log": "Limpiar",
+        "log_export": "Guardar log…",
+        "log_saved": "Log guardado en {path}",
         "pose": "Orientación",
         "recenter": "Recentrar: la postura actual pasa a ser de frente (plano: punta a la pantalla; de lado: botones hacia ti)",
         "pose_gyro": "MotionPlus + gravedad; la dirección deriva poco a poco, usa Recentrar",
@@ -374,8 +496,8 @@ TEXT = {
         "tab_gamepad": "Mando Xbox",
         "gp_intro": "Cada modo es común a todos los Wiimotes conectados. Un modo Xbox da a cada mando su propio "
                     "mando Xbox virtual (ViGEmBus); el modo DSU envía los mandos a emuladores DSU (Dolphin, "
-                    "Cemu) con todas sus funciones; en los demás modos los clientes DSU ven los mandos pero no "
-                    "reciben entradas. "
+                    "Cemu) con todas sus funciones; el modo PC los convierte en ratón y teclado; en los demás "
+                    "modos los clientes DSU ven los mandos pero no reciben entradas. "
                     "Cambia de modo desde el mando: mantén el modificador y pulsa una flecha, en sentido horario "
                     "(↑ 1, → 2, ↓ 3, ← 4); el mando vibra tantas veces como el número del modo.",
         "gp_active": "Modo activo:",
@@ -394,6 +516,95 @@ TEXT = {
         "tray_open": "Abrir WiiChinaHook",
         "tray_mode": "Modo",
         "tray_exit": "Salir",
+        "gp_dsu_extra": "Servidores DSU adicionales",
+        "gp_dsu_extra_hint": "Un slot DSU lleva un solo sensor de movimiento y nada de IR, así que estos "
+                             "servidores envían lo que falta: el acelerómetro del Nunchuk y el puntero IR. "
+                             "Añade cada uno como otro servidor en Dolphin (ver la guía). Desactivado = sus "
+                             "dispositivos desaparecen.",
+        "gp_dsu_nunchuk_server": "Servidor de movimiento del Nunchuk",
+        "gp_dsu_ir_server": "Servidor del puntero IR",
+        "gp_dsu_port": "Puerto UDP {port} (Ajustes → Red)",
+        "gp_dsu_port_off": "Puerto 0: no se abre (Ajustes → Red)",
+        "gp_dsu_nunchuk_binds": "Dolphin: Nunchuk → Extension Motion Input → Accelerometer = Accel Up/Down/…",
+        "gp_dsu_ir_binds": "Dolphin: Motion Simulation → Point = Right Y+/Y-/X-/X+, Hide = Cross (IR perdido)",
+        "dsu_nunchuk_port": "Puerto DSU Nunchuk",
+        "dsu_ir_port": "Puerto DSU IR",
+        "dsu_extra_ports_hint": "Servidores DSU adicionales para el movimiento del Nunchuk y el puntero IR "
+                                "(0 = desactivado). Se activan o desactivan en los ajustes del modo DSU.",
+        "gp_startup_mode": "Modo al iniciar",
+        "gp_startup_last": "Último modo activo",
+        "gp_startup_hint": "El modo con el que arranca el servicio (p. ej. al iniciar Windows): uno fijo o el "
+                           "último que usaste.",
+        "gp_cat_combos": "Combinaciones",
+        "gp_chord_window_ms": "Margen de combinación (ms, 0–300)",
+        "gp_type_pc": "PC (ratón y teclado)",
+        "gp_view_pc": "Modo PC: los mandos manejan el ratón y el teclado, sin mando Xbox virtual.",
+        "pc_reset": "Valores PC por defecto",
+        "pc_claimed": "lo usa el ratón",
+        "pc_kind_none": "Nada",
+        "pc_kind_keys": "Teclas",
+        "pc_kind_mouse": "Ratón",
+        "pc_kind_system": "Sistema",
+        "pc_kind_open": "Abrir",
+        "pc_kind_toggle": "Alternar",
+        "pc_hint_keys": "p. ej. ctrl+9 o ctrl+shift+esc",
+        "pc_hint_open": "programa, archivo o dirección https://",
+        "pc_hint_toggle": "pasos separados por |, p. ej. ctrl+c | ctrl+v | system:mute",
+        "pc_mouse_left": "Clic izquierdo",
+        "pc_mouse_right": "Clic derecho",
+        "pc_mouse_middle": "Clic central",
+        "pc_mouse_scroll_up": "Rueda arriba",
+        "pc_mouse_scroll_down": "Rueda abajo",
+        "pc_system_mute": "Silenciar",
+        "pc_system_volume_up": "Subir volumen",
+        "pc_system_volume_down": "Bajar volumen",
+        "pc_system_next_track": "Siguiente pista",
+        "pc_system_previous_track": "Pista anterior",
+        "pc_system_play_pause": "Reproducir / pausa",
+        "pc_system_stop": "Detener",
+        "pc_system_start_menu": "Menú Inicio",
+        "pc_src_nc_up": "Stick del Nunchuk ↑",
+        "pc_src_nc_down": "Stick del Nunchuk ↓",
+        "pc_src_nc_left": "Stick del Nunchuk ←",
+        "pc_src_nc_right": "Stick del Nunchuk →",
+        "pc_mouse": "Ratón",
+        "pc_mouse_source": "Mueve el ratón",
+        "pc_mouse_src_none": "Nada",
+        "pc_mouse_src_gyro": "Giroscopio (gira el mando)",
+        "pc_mouse_src_ir": "Puntero IR (apunta a la barra sensora)",
+        "pc_mouse_src_nc_stick": "Stick del Nunchuk",
+        "pc_mouse_src_wm_dpad": "Cruceta del Wiimote",
+        "pc_gyro_speed": "Giroscopio: píxeles por grado",
+        "pc_gyro_deadzone": "Zona muerta del giroscopio (°/s)",
+        "pc_stick_speed": "Stick / cruceta: píxeles por segundo",
+        "pc_stick_deadzone": "Zona muerta del stick (0–0,9)",
+        "pc_ir_range": "Rango IR (0,05–1)",
+        "pc_ir_smoothing": "Suavizado IR (0–0,95)",
+        "pc_shake_g": "Fuerza de sacudida",
+        "pc_mouse_hint": "Lo que mueve el ratón no se puede mapear también: con la cruceta o el stick del "
+                         "Nunchuk, sus filas de abajo quedan desactivadas. El giroscopio mueve el ratón al girar "
+                         "el mando (la calibración rápida elimina la deriva); el IR lo coloca donde apuntas; el "
+                         "stick y la cruceta lo empujan, más rápido cuanto más tiempo los mantienes.",
+        "pc_help_title": "Cómo escribir las acciones",
+        "pc_help": "- **Teclas**: nombres unidos con `+`, tantos como quieras: `ctrl+9`, `ctrl+shift+esc`, "
+                   "`win+d`, `alt+f4`. Se mantienen pulsadas mientras mantienes el botón.\n"
+                   "- Nombres: `a`–`z`, `0`–`9`, `f1`–`f24`, `ctrl`, `shift`, `alt`, `win`, `enter`, `esc`, "
+                   "`tab`, `space`, `backspace`, `delete`, `insert`, `home`, `end`, `pageup`, `pagedown`, `up`, "
+                   "`down`, `left`, `right`, `capslock`, `printscreen`, `menu`, `num0`–`num9`, `num_add`, `;` "
+                   "`=` `,` `-` `.` `/` `` ` `` `[` `\\` `]` `'`; modificadores derechos `rctrl`, `rshift`, "
+                   "`ralt`.\n"
+                   "- **Abrir**: un programa (`notepad`, `C:\\Juegos\\juego.exe`), un archivo o una "
+                   "dirección web (`https://…`).\n"
+                   "- **Alternar**: pasos separados por `|`; cada pulsación ejecuta el siguiente, p. ej. "
+                   "`system:mute | system:mute` o `ctrl+c | ctrl+v`. Un paso puede ser teclas, `mouse:…`, "
+                   "`system:…` u `open:…`.\n"
+                   "- Los juegos que se ejecutan como administrador solo aceptan estas teclas si WiiChinaHook "
+                   "también se ejecuta como administrador.",
+        "pc_cat_wiimote": "Wiimote",
+        "pc_cat_nunchuk": "Nunchuk",
+        "pc_cat_shakes": "Sacudidas",
+        "pc_modifier_hint": "El modificador de modo (B por defecto) ejecuta su acción al soltarlo, así modificador "
+                            "+ flecha cambia de modo sin hacer clic.",
         "gp_type": "Tipo de modo",
         "gp_type_empty": "Vacío (solo API)",
         "gp_type_xbox": "Mando Xbox",
@@ -402,8 +613,8 @@ TEXT = {
                         "acelerómetro y giroscopio MotionPlus. Aquí no hay nada que reasignar; las entradas se "
                         "asignan en el emulador (guías abajo).",
         "gp_dsu_table": "Cómo se llama cada entrada en el emulador",
-        "gp_dsu_limits": "DSU no lleva la cámara IR y tiene un único sensor de movimiento por mando: el puntero sale "
-                         "del giroscopio (asigna Recenter en el emulador) y el movimiento del Nunchuk no se envía.",
+        "gp_dsu_limits": "Este servidor lleva los botones del mando, el stick/C/Z del Nunchuk, el acelerómetro y el "
+                         "giroscopio. El movimiento del Nunchuk y el puntero IR van por los servidores adicionales.",
         "gp_dsu_guide": "Guía",
         "gp_dsu_guide_missing": "Guía no encontrada ({name}); está en la carpeta docs/guides del repositorio.",
         "gp_view_dsu": "Modo DSU: los mandos van a Dolphin/Cemu, sin mando Xbox virtual.",
@@ -430,7 +641,27 @@ TEXT = {
         "gp_shake_live_idle": "agita un mando en un modo con plantilla Xbox…",
         "gp_ir_range": "Rango IR (0,05–1)",
         "gp_shake_g": "Fuerza de sacudida (g)",
-        "gp_deadzone": "Zona muerta (0–0,5)",
+        "gp_deadzone": "Zona muerta: stick del Nunchuk e IR (0–0,5)",
+        "gp_gyro_deadzone": "Zona muerta del giroscopio (0–0,5)",
+        "gp_active_title": "Modo activo",
+        "gp_live_title": "Vista en vivo",
+        "gp_edit_title": "Editar modo",
+        "gp_empty_hint": "Este modo está vacío: sin mando Xbox virtual ni entradas DSU, solo la API. "
+                         "Elige un tipo para configurarlo.",
+        "gp_cat_face": "Botones frontales",
+        "gp_cat_shoulders": "Bumpers y gatillos",
+        "gp_cat_dpad": "Cruceta",
+        "gp_cat_menu": "Menú y clic de sticks",
+        "gp_cat_sticks": "Sticks",
+        "gp_cat_aim": "Apuntado con giroscopio",
+        "gp_cat_speed": "Velocidad del giroscopio",
+        "gp_cat_ir": "Puntero IR",
+        "gp_sticks_hint": "Qué mueve cada stick. Esta zona muerta es para el stick del Nunchuk y el puntero IR.",
+        "gp_aim_hint": "Para \"MotionPlus apuntado\": grados de giro o inclinación para llegar al máximo. La "
+                       "zona muerta del giroscopio ignora pequeños movimientos de la mano cerca del centro "
+                       "(también la usa la velocidad).",
+        "gp_speed_hint": "Para \"MotionPlus velocidad\": velocidad de giro para llegar al máximo; el stick "
+                         "vuelve al centro al dejar de girar.",
         "gp_save": "Guardar mapeo",
         "gp_reset": "Mapeo de juego por defecto",
         "gp_saved": "Modo {n} guardado",
@@ -452,7 +683,9 @@ TEXT = {
         "gp_combo_hint": "Cada control Xbox se activa con su primera entrada o con hasta tres a la vez "
                          "(\"+\"): botones y/o sacudidas, p. ej. A + agitar hacia arriba. Una combinación no "
                          "envía también sus botones por separado, y las combinaciones más largas tienen "
-                         "prioridad.",
+                         "prioridad. Un botón que forma parte de una combinación espera el margen antes de "
+                         "activarse solo, así sus compañeros pueden pulsarse unos ms después; los demás "
+                         "botones nunca esperan.",
     },
 }
 

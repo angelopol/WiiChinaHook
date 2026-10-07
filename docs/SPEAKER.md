@@ -117,7 +117,7 @@ for emulated remotes) would send, per emulated remote, what the game writes:
 - the speaker configuration (format, rate, volume, mute/enable);
 - each `0x18` payload, as is.
 
-The target would be a local UDP port. WiiChinaHook would apply the same configuration
+The target would be a local UDP port (e.g. 26764; 26760–26763 are taken by DSU and the API). WiiChinaHook would apply the same configuration
 on the real remote and relay the payloads with its pacing thread. The game's audio is
 already in the remote's own format, so there is nothing to re-encode, and latency is a
 single local hop. Most of the work on WiiChinaHook's side already exists: setup,

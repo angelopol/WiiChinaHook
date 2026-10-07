@@ -2,7 +2,7 @@ import copy
 
 import pytest
 
-from wiichinahook.gamepad.mapping import (DEFAULT_CONFIG, GAME_TEMPLATE, MappingEngine, mode_type, unavailable_bindings, validate_config,
+from wiichinahook.gamepad.mapping import (DEFAULT_CONFIG, DSU_TEMPLATE, GAME_TEMPLATE, MappingEngine, mode_type, unavailable_bindings, validate_config,
                                           validate_template)
 
 B, A, HOME, UP, RIGHT, DOWN, LEFT = 0x0004, 0x0008, 0x0080, 0x0800, 0x0200, 0x0400, 0x0100
@@ -22,11 +22,15 @@ def test_default_game_layout_matches_the_spec():
     # − + 1 2 -> X Y A B; A/B -> RB/RT; Home -> Start; C+Z together -> Select only.
     assert out.buttons == {"X", "Y", "A", "B", "RB", "START", "BACK"}
     assert out.rt == 1.0 and out.lt == 0.0 and "LB" not in out.buttons
-    out, _ = engine.process(state(0, c=True), TEMPLATE)
+    engine.process(state(0, t=0.01), TEMPLATE)                     # all released
+    engine.process(state(0, c=True, t=0.02), TEMPLATE)             # C alone (after the chord window)
+    out, _ = engine.process(state(0, c=True, t=0.08), TEMPLATE)
     assert out.buttons == {"LB"}
-    out, _ = engine.process(state(0, z=True), TEMPLATE)
+    engine.process(state(0, t=0.09), TEMPLATE)
+    engine.process(state(0, z=True, t=0.10), TEMPLATE)
+    out, _ = engine.process(state(0, z=True, t=0.16), TEMPLATE)
     assert out.lt == 1.0 and not out.buttons
-    out, _ = engine.process(state(UP | RIGHT), TEMPLATE)            # D-pad without the modifier
+    out, _ = engine.process(state(UP | RIGHT, t=0.17), TEMPLATE)    # not in any chord: at once
     assert out.buttons == {"DPAD_UP", "DPAD_RIGHT"}
 
 
@@ -143,8 +147,9 @@ def test_config_validation_and_free_remapping():
                                          "sticks": {"RIGHT_STICK": "ir"}}]})
     assert config["modes"][0]["buttons"]["A"] == "wm_a"
     assert config["modes"][0]["buttons"]["X"] is None            # unspecified = unassigned
-    assert config["modes"][0]["sticks"]["RIGHT_STICK"] == "ir" and config["modes"][2:] == [None] * 2
-    assert config["modes"][1] == {"type": "dsu", "name": "DSU"}   # old configs: empty mode 2 becomes DSU
+    assert config["modes"][0]["sticks"]["RIGHT_STICK"] == "ir" and config["modes"][3] is None
+    assert mode_type(config["modes"][2]) == "pc"                   # old configs: empty mode 3 becomes PC
+    assert config["modes"][1] == DSU_TEMPLATE   # old configs: empty mode 2 becomes DSU (extra servers on)
     for bad in ({"modifier": "wm_power"}, {"mode": 5}, {"modes": [{"buttons": {"Z": "wm_a"}}]},
                 {"modes": [{"buttons": {"A": "wm_power"}}]}, {"modes": [{"sticks": {"LEFT_STICK": "wm_a"}}]},
                 {"modes": [{"buttons": {"A": "wm_a+wm_b+wm_1+wm_2"}}]},       # more than three
@@ -172,7 +177,7 @@ def test_button_plus_shake_combination():
     assert any("L3" in o.buttons for o in outs[10:13]) and not any("L3" in o.buttons for o in outs[:10])
     # While the combination fires, A alone (RB) is not sent; before the shake it is.
     assert all("RB" not in o.buttons for o in outs if "L3" in o.buttons)
-    assert "RB" in outs[0].buttons
+    assert "RB" not in outs[0].buttons and "RB" in outs[6].buttons   # A waits the chord window
     outs = shake_up_states(0, template, MappingEngine())          # shake without A: nothing
     assert not any("L3" in o.buttons for o in outs)
 
@@ -220,7 +225,60 @@ def test_dsu_mode_type_and_migration():
     current = validate_config({"version": 2, "modes": [None, None, {"type": "dsu"}, None]})
     assert [mode_type(t) for t in current["modes"]] == [None, None, "dsu", None]   # no re-migration
     legacy = validate_config({"modes": [None, {"buttons": {"A": "wm_a"}}, None, None]})
-    assert [mode_type(t) for t in legacy["modes"]] == [None, "xbox", None, None]   # mode 2 in use: kept
+    assert [mode_type(t) for t in legacy["modes"]] == [None, "xbox", "pc", None]   # mode 2 in use: kept
     assert unavailable_bindings({"type": "dsu", "name": "DSU"}, {}) == []
     with pytest.raises(ValueError):
         validate_template({"type": "keyboard"})
+
+
+def test_aim_stick_is_centred_after_recalibrating_a_tipped_down_remote():
+    from wiichinahook.orientation import OrientationFilter
+    f = OrientationFilter()
+    f.q = tuple(aimed(10.0, up_deg=-15.0))             # natural grip: a bit down and right
+    f.recenter()
+    engine = MappingEngine()
+    out, _ = engine.process(aim_state(list(f.output(f.q)), recenter=1), TEMPLATE)
+    assert (out.rx, out.ry) == (0.0, 0.0)
+    f.q = tuple(aimed(0.0, up_deg=10.0))               # same heading, raised 25° from that grip: full up
+    out, _ = engine.process(aim_state(list(f.output(f.q)), recenter=1), TEMPLATE)
+    assert out.ry == pytest.approx(1.0) and out.rx == pytest.approx(0.0, abs=1e-6)
+
+
+def test_chord_members_wait_the_window_so_a_late_partner_still_makes_the_combination():
+    engine = MappingEngine()                                    # BACK = C+Z, LB = C, LT = Z (50 ms)
+    out, _ = engine.process(state(0, c=True, t=0.000), TEMPLATE)
+    assert not out.buttons                                      # C waits: Z may follow
+    out, _ = engine.process(state(0, c=True, t=0.030), TEMPLATE)
+    assert not out.buttons
+    out, _ = engine.process(state(0, c=True, z=True, t=0.040), TEMPLATE)   # Z 40 ms later
+    assert out.buttons == {"BACK"} and out.lt == 0.0            # only the combination, never LB
+    out, _ = engine.process(state(0, z=True, t=0.300), TEMPLATE)          # C released first
+    assert not out.buttons and out.lt == 0.0                    # Z stays used until released
+    out, _ = engine.process(state(0, t=0.310), TEMPLATE)
+    assert not out.buttons and out.lt == 0.0
+
+
+def test_buttons_outside_combinations_never_wait_and_quick_taps_are_kept():
+    engine = MappingEngine()
+    out, _ = engine.process(state(ONE, t=0.0), TEMPLATE)
+    assert out.buttons == {"A"}                                 # 1 is in no combination: instant
+    engine.process(state(0, t=0.01), TEMPLATE)
+    engine.process(state(0, c=True, t=0.02), TEMPLATE)         # C tapped for 20 ms only
+    out, _ = engine.process(state(0, t=0.04), TEMPLATE)
+    assert out.buttons == {"LB"}                                # still reaches the game as a tap
+    out, _ = engine.process(state(0, t=0.12), TEMPLATE)
+    assert not out.buttons                                      # short pulse, then released
+    instant = validate_template(dict(GAME_TEMPLATE, chord_window_ms=0))
+    out, _ = MappingEngine().process(state(0, c=True, t=0.0), instant)
+    assert out.buttons == {"LB"}                                # window 0: old behaviour
+    for bad in (-1, 301, True):
+        with pytest.raises(ValueError):
+            validate_template(dict(GAME_TEMPLATE, chord_window_ms=bad))
+
+
+def test_startup_mode_validation():
+    assert validate_config(None)["startup_mode"] is None
+    assert validate_config({"startup_mode": 4})["startup_mode"] == 4
+    for bad in (0, 5, "2", True):
+        with pytest.raises(ValueError):
+            validate_config({"startup_mode": bad})

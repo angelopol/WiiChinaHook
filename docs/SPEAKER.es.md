@@ -122,7 +122,7 @@ escribe el juego:
 - la configuración del altavoz (formato, frecuencia, volumen, silencio/encendido);
 - cada carga de `0x18`, tal cual.
 
-El destino sería un puerto UDP local. WiiChinaHook aplicaría esa misma configuración en
+El destino sería un puerto UDP local (p. ej. 26764; del 26760 al 26763 los usan DSU y la API). WiiChinaHook aplicaría esa misma configuración en
 el mando real y reenviaría las cargas con su hilo de ritmo. El audio del juego ya viene
 en el formato del propio mando, así que no hay que recodificar nada, y la latencia es un
 solo salto local. Casi todo lo necesario en el lado de WiiChinaHook ya existe: la

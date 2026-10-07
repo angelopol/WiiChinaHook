@@ -10,6 +10,7 @@ import time
 import zlib
 
 from .dsu_mapping import dsu_buttons_from_wiimote
+from .gamepad.inputs import ir_stick
 from .wiimote import WiimoteState
 
 PROTOCOL_VERSION = 1001
@@ -71,8 +72,17 @@ def parse_mac(mac):
     return raw
 
 
+def stick_byte(value):
+    return max(0, min(255, round(128 + value * (127 if value >= 0 else 128))))
+
+
 class DsuServer:
+    # Each server of a remote gets its own MAC (first byte flipped), so clients never
+    # confuse the remote, Nunchuk and IR devices of one slot.
+    MAC_FLIP = 0x00
+
     def __init__(self, bind_host="127.0.0.1", bind_port=26760):
+        self.enabled = True       # False: every slot reads as disconnected
         self.builder = DsuPacketBuilder()
         self.states = {}
         self.clients = {}  # (endpoint, flags, slot, MAC) -> last subscription
@@ -134,20 +144,30 @@ class DsuServer:
             if len(self.clients) < 256 or key in self.clients:
                 self.clients[key] = time.monotonic()
 
+    def connected(self, state):
+        return state is not None and state.connected and self.enabled
+
+    def mac(self, state):
+        raw = bytearray(parse_mac(state.address))
+        raw[0] ^= self.MAC_FLIP
+        return bytes(raw)
+
     def _shared_payload(self, slot, state):
-        connected = state is not None and state.connected
+        connected = self.connected(state)
         battery = 0 if not connected or state.battery is None else (1 if state.battery < .1 else
                   2 if state.battery < .25 else 3 if state.battery < .5 else 4 if state.battery < .9 else 5)
         # Model is "full gyro" for every connected remote: Dolphin recreates its devices
         # whenever a slot's model changes, and MotionPlus is detected after connecting.
         return struct.pack("<BBBB6sB", slot, 2 if connected else 0, 2 if connected else 0,
-                           2 if connected else 0, parse_mac(state.address) if state else bytes(6), battery)
+                           2 if connected else 0, self.mac(state) if state else bytes(6), battery)
 
     def send_state(self, state, active=True):
         """`active=False` keeps clients' devices connected but sends no input (the
         remote is driving a virtual Xbox controller or the mode is empty); those
         neutral packets go out at IDLE_HZ instead of the report rate."""
         self.states[state.slot] = state
+        if not self.enabled:
+            return                                # port info reports the slot as disconnected
         now = time.monotonic()
         if not active and state.connected:
             if now - self.idle_sent.get(state.slot, 0.0) < 1 / IDLE_HZ:
@@ -156,7 +176,7 @@ class DsuServer:
         endpoints = set()
         for (endpoint, flags, slot, mac), seen in self.clients.items():
             if now - seen < 5 and (flags == 0 or flags & 1 and slot == state.slot or
-                                   flags & 2 and mac == parse_mac(state.address)):
+                                   flags & 2 and mac == self.mac(state)):
                 endpoints.add(endpoint)
         for endpoint in endpoints:
             key = (endpoint, state.slot)
@@ -167,11 +187,16 @@ class DsuServer:
     def _pad_data_payload(self, state, counter=0, active=True):
         payload = bytearray(80)
         payload[:11] = self._shared_payload(state.slot, state)
-        payload[11] = int(state.connected)
+        payload[11] = int(self.connected(state))
         struct.pack_into("<I", payload, 12, counter)
         payload[20:24] = b"\x80" * 4
-        if not state.connected or not active:
+        if not self.connected(state) or not active:
             return bytes(payload)
+        self._fill(payload, state)
+        return bytes(payload)
+
+    def _fill(self, payload, state):
+        """The remote: buttons, Nunchuk stick/C/Z, accelerometer and MotionPlus."""
         dpad, face, home, analogs = dsu_buttons_from_wiimote(state.buttons)
         analogs = bytearray(analogs)
         if state.nunchuk:
@@ -197,4 +222,49 @@ class DsuServer:
         struct.pack_into("<fff", payload, 56, x, -z, -y)
         yaw, roll, pitch = state.gyro_dps or (0., 0., 0.)
         struct.pack_into("<fff", payload, 68, -pitch, -yaw, -roll)
-        return bytes(payload)
+
+
+class NunchukDsuServer(DsuServer):
+    """Second server: per slot, the Nunchuk's accelerometer as the motion sensor (one
+    DSU slot carries a single IMU, which the main server gives to the remote). Bind it
+    to the Nunchuk's "Extension Motion Input" in Dolphin. Same axes as the remote's;
+    the Nunchuk reads uncalibrated: (raw - 512) / 200 g. No Nunchuk = neutral data."""
+    MAC_FLIP = 0x10
+
+    def _fill(self, payload, state):
+        nunchuk = state.nunchuk or {}
+        accel = nunchuk.get("accel_g")
+        if accel is None and nunchuk.get("accel_raw"):
+            accel = tuple((v - 512) / 200.0 for v in nunchuk["accel_raw"])
+        struct.pack_into("<Q", payload, 48, state.nunchuk_timestamp_us)
+        x, y, z = accel or (0., 0., 0.)
+        struct.pack_into("<fff", payload, 56, x, -z, -y)
+
+
+class IrDsuServer(DsuServer):
+    """Third server: per slot, the IR camera pointer as an absolute right stick (and
+    the first touch point), so Dolphin's IR "Point" works like a real Wii's. While the
+    camera does not see the sensor bar the stick holds its last position and Cross
+    stays pressed (bind it to Point's "Hide" to make the cursor leave the screen)."""
+    MAC_FLIP = 0x20
+    LOST_AFTER = 0.1    # seconds without dots before reporting "IR lost"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.ir_range = 0.5
+        self.last = {}  # slot -> (x, y, monotonic time it was seen)
+
+    def _fill(self, payload, state):
+        stick = ir_stick(state.ir, self.ir_range)
+        now = time.monotonic()
+        if stick is not None:
+            self.last[state.slot] = (*stick, now)
+        x, y, seen = self.last.get(state.slot, (0.0, 0.0, 0.0))
+        payload[22:24] = bytes([stick_byte(x), stick_byte(y)])
+        if now - seen > self.LOST_AFTER:
+            payload[17] |= 0x40                   # Cross = IR lost
+            payload[24 + 6] = 255                 # its analog pressure (analogs[6])
+        else:                                     # touch 1 at the pointer (DS4 pad 1920x943)
+            payload[36], payload[37] = 1, 0
+            struct.pack_into("<HH", payload, 38, round((x + 1) / 2 * 1919), round((1 - y) / 2 * 942))
+        struct.pack_into("<Q", payload, 48, state.ir_timestamp_us)

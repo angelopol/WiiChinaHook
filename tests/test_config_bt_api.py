@@ -233,3 +233,13 @@ def test_state_snapshot_is_independent_of_later_updates():
     state.calibration["heading"]="ir"
     assert snap["capabilities"]["nunchuk"] is False and "heading" not in snap["calibration"]
     assert json.loads(json.dumps(snap))["address"] == "00:11:22:33:44:55"
+
+
+def test_extra_dsu_ports_round_trip_and_must_differ(tmp_path):
+    from wiichinahook.config import save_config, DsuConfig
+    path = tmp_path / "config.json"
+    save_config(AppConfig(dsu=DsuConfig("127.0.0.1", 26760, 26770, 0)), path)
+    assert load_config(path).dsu == DsuConfig("127.0.0.1", 26760, 26770, 0)
+    path.write_text(json.dumps({"dsu": {"port": 26760, "nunchuk_port": 26760}}), encoding="utf-8")
+    with pytest.raises(ValueError):
+        load_config(path)

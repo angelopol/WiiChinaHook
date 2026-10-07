@@ -94,16 +94,47 @@ def reference_yaw(q: Quaternion) -> float:
     return heading(face) - math.pi
 
 
+MAX_PITCH_OFFSET = math.radians(45.0)
+
+
+def tip_pitch(q: Quaternion) -> float:
+    """Elevation of the tip above the horizon (radians, + = tip up)."""
+    return math.asin(max(-1.0, min(1.0, rotate(q, (0.0, 1.0, 0.0))[2])))
+
+
 class OrientationFilter:
+    """`q` is the physical orientation (gravity keeps correcting it). Recentering
+    also stores the tip's pitch as the neutral grip: `output()` reports orientations
+    relative to it (a remote held slightly tipped down then reads level), so the 3D
+    view and the aim stick start from where the player holds it. Roll is left as is."""
+
     def __init__(self, kp: float = 1.5):
         self.kp = kp
         self.q: Quaternion | None = None
         self.last_us: int | None = None
+        self.pitch_offset = 0.0   # radians, kept across reset() (only recenter() changes it)
 
     def reset(self):
         self.q, self.last_us = None, None
 
-    def recenter(self):
+    def output(self, q: Quaternion) -> Quaternion:
+        """`q` seen from the neutral grip: rotated about the body X axis (the remote's
+        left-right axis) by the stored pitch."""
+        if not self.pitch_offset:
+            return q
+        return normalize(multiply(q, from_axis_angle((1.0, 0.0, 0.0), -self.pitch_offset)))
+
+    def recenter(self, accel_g=None):
+        """Heading -> straight ahead; pitch -> the current tip pitch becomes level.
+        Without a filtered orientation (no MotionPlus) the tilt comes from `accel_g`."""
+        q = self.q if self.q is not None else (tilt_from_accel(accel_g) if accel_g else None)
+        if q is None:
+            return
+        # Pointing grip only (buttons face up or down): on its side, tilting is steering
+        # and its neutral stays level with gravity.
+        pointing = abs(rotate(q, (0.0, 0.0, 1.0))[2]) > 0.6
+        pitch = tip_pitch(q) if pointing else 0.0
+        self.pitch_offset = max(-MAX_PITCH_OFFSET, min(MAX_PITCH_OFFSET, pitch))
         if self.q is not None:
             self.q = recentered(self.q)
 
@@ -118,11 +149,11 @@ class OrientationFilter:
         """gyro_dps is MotionPlus order (yaw, roll, pitch); accel_g Wii (X, Y, Z)."""
         if self.q is None:
             self.q, self.last_us = tilt_from_accel(accel_g) if accel_g else IDENTITY, t_us
-            return self.q
+            return self.output(self.q)
         dt = (t_us - self.last_us) / 1e6
         self.last_us = t_us
         if not 0 < dt < 0.1:
-            return self.q  # first sample after a gap: only re-arm the clock
+            return self.output(self.q)  # first sample after a gap: only re-arm the clock
         wx, wy, wz = body_rates(gyro_dps)
         if accel_g:
             ax, ay, az = body_accel(accel_g)
@@ -137,7 +168,7 @@ class OrientationFilter:
                 wz += self.kp * (ax * vy - ay * vx)
         dq = multiply(self.q, (0.0, wx, wy, wz))
         self.q = normalize(tuple(c + 0.5 * d * dt for c, d in zip(self.q, dq)))
-        return self.q
+        return self.output(self.q)
 
 
 # Wii IR camera: 1024 px across ~41 degrees. Its image is mirrored as seen from the
