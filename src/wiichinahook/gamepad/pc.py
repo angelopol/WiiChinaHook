@@ -330,6 +330,9 @@ class PcEngine:
         self.deferred = set()        # the modifier: its action fires on release
         self.pending = {}            # input -> (since, wait): may still start a shortcut/gesture
         self.shortcut_held = {}      # "shortcutN" -> its inputs, while held
+        self.gesture_since = {}      # two-button gesture -> when both became held
+        self.shortcut_since = {}     # shortcut -> when all its buttons became held
+        self.shortcut_waiting = {}   # shortcut held but waiting for a longer one -> its inputs
         self.wm_shake, self.nc_shake = ShakeDetector(), ShakeDetector()
         self.last_t = None
         self.carry = [0.0, 0.0]      # sub-pixel remainders of relative motion
@@ -379,15 +382,46 @@ class PcEngine:
             if not members <= held:
                 del self.shortcut_held[key]
                 self.release(key)
-        for index, shortcut in sorted(enumerate(shortcuts), key=lambda item: -len(item[1]["inputs"])):
-            key, members = f"shortcut{index}", set(shortcut["inputs"])
-            if key not in self.shortcut_held and members <= active:
-                self.consume(members)
-                active -= members
-                self.shortcut_held[key] = members
-                self.press(key, shortcut["action"], t)
-        shortcut_members = {m for shortcut in shortcuts for m in shortcut["inputs"]}
         shortcut_wait = template.get("shortcut_window_ms", 50) / 1000
+        sets = {f"shortcut{i}": set(sc["inputs"]) for i, sc in enumerate(shortcuts)}
+        fired = set()                                     # members of shortcuts fired now
+        for index, shortcut in sorted(enumerate(shortcuts), key=lambda item: -len(item[1]["inputs"])):
+            key, members = f"shortcut{index}", sets[f"shortcut{index}"]
+            if key in self.shortcut_held:
+                continue
+            # Buttons of a shorter shortcut that is still held count too, so 1 + 2 can
+            # grow into 1 + 2 + − when − arrives a little late.
+            inside = [k for k, m in self.shortcut_held.items() if m < members]
+            available = active | {m for k in inside for m in self.shortcut_held[k]}
+            if not members <= available:
+                self.shortcut_since.pop(key, None)
+                if self.shortcut_waiting.pop(key, None) is not None and not members & fired:
+                    # Released while it waited for a longer shortcut: still a 1 + 2 tap.
+                    self.consume(members & held)
+                    active -= members
+                    self.press(key, shortcut["action"], t)
+                    self.release(key)
+                continue
+            # A shortcut inside a longer one (1 + 2 inside 1 + 2 + −) waits the window
+            # for the extra buttons before acting. Meanwhile its buttons belong to it:
+            # they never act on their own.
+            since = self.shortcut_since.setdefault(key, t)
+            if any(members < other for other in sets.values()) and t - since < shortcut_wait:
+                self.shortcut_waiting[key] = members
+                for m in members:
+                    self.pending.pop(m, None)
+                active -= members
+                continue
+            self.shortcut_waiting.pop(key, None)
+            fired |= members
+            for k in inside:                               # grown: the shorter one gives way
+                del self.shortcut_held[k]
+                self.release(k)
+            self.consume(members)
+            active -= members
+            self.shortcut_held[key] = members
+            self.press(key, shortcut["action"], t)
+        shortcut_members = {m for shortcut in shortcuts for m in shortcut["inputs"]}
 
         # Two-button gestures: a two-button mode modifier and the A + B mouse action.
         # Their members wait MODIFIER_WINDOW for each other; together they click nothing.
@@ -396,13 +430,21 @@ class PcEngine:
         if ab_action:
             gestures.append(AB)
         members = {m for gesture in gestures for m in gesture}
+        shortcut_sets = [set(sc["inputs"]) for sc in shortcuts]
         for gesture in gestures:
-            if all(m in active for m in gesture):
-                self.consume(set(gesture))
-                active -= set(gesture)
-                if gesture == AB and ab_action == "center" and not self.ab_done:
-                    self.ab_done = True
-                    self.center()
+            if not all(m in active for m in gesture):
+                self.gesture_since.pop(gesture, None)
+                continue
+            # A + B (or a two-button modifier) inside a longer super shortcut, e.g.
+            # A + B + 1: give the third button the shortcut window to arrive first.
+            since = self.gesture_since.setdefault(gesture, t)
+            if any(set(gesture) < sc for sc in shortcut_sets) and t - since < shortcut_wait:
+                continue
+            self.consume(set(gesture))
+            active -= set(gesture)
+            if gesture == AB and ab_action == "center" and not self.ab_done:
+                self.ab_done = True
+                self.center()
         self.ab_held = all(m in pressed for m in AB)
         if not self.ab_held:
             self.ab_done = False
@@ -422,6 +464,11 @@ class PcEngine:
                 self.deferred.add(source)
             elif source in shortcut_members:
                 self.pending[source] = (t, shortcut_wait)      # may start a super shortcut
+                # Partners already waiting restart their window: three buttons are
+                # rarely pressed within one window of the first.
+                for other in list(self.pending):
+                    if other != source and any({source, other} <= sc for sc in shortcut_sets):
+                        self.pending[other] = (t, self.pending[other][1])
             elif source in members and source != modifier:
                 self.pending[source] = (t, MODIFIER_WINDOW)    # may become a gesture
             elif source in members and not on_release and len(modifier.split("+")) > 1:

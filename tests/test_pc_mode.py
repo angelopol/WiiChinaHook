@@ -450,3 +450,73 @@ def test_shortcut_validation():
         validate_template({"type": "pc_game", "shortcuts": [{"inputs": "wm_1+wm_2", "action": "system:mute"}]})
     ok = validate_template(dict(base, shortcuts=[{"inputs": "wm_1+nc_c+wm_shake_x", "action": "oem_period"}]))
     assert ok["shortcuts"][0] == {"inputs": ["wm_1", "nc_c", "wm_shake_x"], "action": "keys:oem_period"}
+
+
+def three_button(inputs, buttons, ab_action=None):
+    return validate_template({"type": "pc", "mouse": {"source": None, "ab_action": ab_action},
+                              "buttons": buttons, "shortcuts_enabled": True,
+                              "shortcuts": [{"inputs": inputs, "action": "keys:f9"}]})
+
+
+def test_three_button_shortcut_pressed_one_after_another():
+    out = FakeOutput()
+    tpl = three_button(["wm_1", "wm_2", "wm_minus"], {"wm_1": "keys:1", "wm_2": "keys:2", "wm_minus": "keys:3"})
+    engine = PcEngine(out)
+    run(engine, tpl, [(0.00, set()), (0.01, {"wm_1"}), (0.045, {"wm_1", "wm_2"}),
+                      (0.09, {"wm_1", "wm_2", "wm_minus"})])            # 80 ms from first to last
+    assert out.take() == [("key", KEYS["f9"][0], True)]                 # only the shortcut, no 1 or 2
+    run(engine, tpl, [(0.5, set())])
+    assert out.take() == [("key", KEYS["f9"][0], False)]
+
+
+def test_three_button_shortcut_containing_a_plus_b():
+    out = FakeOutput()
+    tpl = three_button(["wm_a", "wm_b", "wm_1"], {"wm_a": "mouse:left", "wm_b": "mouse:right"}, ab_action="center")
+    engine = PcEngine(out)
+    run(engine, tpl, [(0.00, set()), (0.01, {"wm_a", "wm_b"}), (0.04, {"wm_a", "wm_b", "wm_1"})])
+    assert out.take() == [("key", KEYS["f9"][0], True)]                 # not swallowed by A + B
+    run(engine, tpl, [(0.3, set()), (0.4, {"wm_a", "wm_b"}), (0.5, {"wm_a", "wm_b"})])
+    assert out.take() == [("key", KEYS["f9"][0], False), ("center",)]  # A + B alone still recentres
+
+
+def test_overlapping_shortcuts_1_2_and_1_2_minus():
+    out = FakeOutput()
+    tpl = validate_template({"type": "pc", "mouse": {"source": None, "ab_action": None},
+                             "buttons": {"wm_1": "keys:1", "wm_2": "keys:2", "wm_minus": "keys:3"},
+                             "shortcuts_enabled": True,
+                             "shortcuts": [{"inputs": ["wm_1", "wm_2"], "action": "keys:f8"},
+                                           {"inputs": ["wm_1", "wm_2", "wm_minus"], "action": "keys:f9"}]})
+    f8, f9 = KEYS["f8"][0], KEYS["f9"][0]
+    engine = PcEngine(out)                                              # 1, 2, then − within the window
+    run(engine, tpl, [(0.00, set()), (0.01, {"wm_1"}), (0.03, {"wm_1", "wm_2"}),
+                      (0.06, {"wm_1", "wm_2", "wm_minus"}), (0.3, {"wm_1", "wm_2", "wm_minus"}), (0.4, set())])
+    assert out.take() == [("key", f9, True), ("key", f9, False)]       # only 1 + 2 + −: no F8, no 3
+    engine = PcEngine(out)                                              # − arrives late: 1 + 2 grows into it
+    run(engine, tpl, [(0.00, set()), (0.01, {"wm_1", "wm_2"}), (0.2, {"wm_1", "wm_2"}),
+                      (0.3, {"wm_1", "wm_2", "wm_minus"}), (0.5, set())])
+    assert out.take() == [("key", f8, True), ("key", f8, False), ("key", f9, True), ("key", f9, False)]
+    engine = PcEngine(out)                                              # 1 + 2 alone
+    run(engine, tpl, [(0.00, set()), (0.01, {"wm_1", "wm_2"}), (0.2, {"wm_1", "wm_2"}), (0.3, set())])
+    assert out.take() == [("key", f8, True), ("key", f8, False)]
+
+
+def test_quick_tap_of_a_shortcut_inside_a_longer_one():
+    """1 + 2 tapped shorter than the window (300 ms, as in the user's config) while
+    1 + 2 + − exists: the 1 + 2 shortcut, never the 1 and 2 buttons."""
+    out = FakeOutput()
+    tpl = validate_template({"type": "pc", "mouse": {"source": None, "ab_action": None},
+                             "buttons": {"wm_1": "keys:1", "wm_2": "keys:2", "wm_minus": "keys:3"},
+                             "shortcuts_enabled": True, "shortcut_window_ms": 300,
+                             "shortcuts": [{"inputs": ["wm_1", "wm_2"], "action": "keys:f8"},
+                                           {"inputs": ["wm_1", "wm_2", "wm_minus"], "action": "keys:f9"}]})
+    engine = PcEngine(out)
+    t = 0.0
+    def step(pressed, n=1):
+        nonlocal t
+        for _ in range(n):
+            engine.update(snap(t), set(pressed), tpl, "wm_b", t)
+            t += 0.005
+    step(set(), 3); step({"wm_1"}, 3); step({"wm_1", "wm_2"}, 30); step({"wm_2"}, 2); step(set(), 80)
+    keys = [e for e in out.events if e[0] == "key"]
+    assert keys == [("key", KEYS["f8"][0], True), ("key", KEYS["f8"][0], False)]
+
