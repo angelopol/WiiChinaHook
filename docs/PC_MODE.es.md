@@ -26,7 +26,10 @@ Lo que mueve el ratón **no se puede mapear también**. Con la cruceta o el stic
 Nunchuk como ratón, sus filas quedan desactivadas en el editor y la configuración las
 rechaza.
 
-Con el giroscopio, la calibración rápida (pestaña *Mandos*) elimina la deriva. Si el
+Con el giroscopio, la calibración rápida (pestaña *Mandos*) elimina la deriva y, con
+**Recentrar el ratón al recalibrar** (activado por defecto), también lleva el puntero al
+centro de la pantalla. Apunta el mando al centro mientras recalibras, y mando y puntero
+vuelven a coincidir. Si el
 puntero sigue moviéndose solo, sube un poco la zona muerta.
 
 ## Acciones
@@ -76,7 +79,8 @@ alias comunes (`control`, `escape`, `del`, `pgup`…), en mayúsculas o minúscu
 
 - **Cambiar de modo sigue funcionando:** modificador (B) + flecha. En el modo PC, la
   acción del modificador se ejecuta **al soltarlo**, y solo si no cambiaste de modo.
-  B + flecha nunca hace clic derecho.
+  B + flecha nunca hace clic derecho. Con el modificador **A + B**, A y B se esperan 60 ms:
+  pulsados a la vez son el modificador y no hacen clic; por separado hacen clic como siempre.
 - **Los botones que ya estaban pulsados al empezar el modo** (p. ej. el B + ↓ que lo
   eligió) se ignoran hasta que los sueltas.
 - **Nada se queda pulsado:** al cambiar de modo, cambiar la configuración o

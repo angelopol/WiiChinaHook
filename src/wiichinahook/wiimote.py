@@ -106,6 +106,10 @@ class ReportParser:
         # Per-channel (yaw, roll, pitch) correction from calibrate_axis; may be
         # negative when a remote reports a channel with the opposite sign.
         self.gyro_scale = (1.0,) * 3
+        # Per-axis noise gate (yaw, roll, pitch) in °/s from calibrate_noise: a rate
+        # below it reads exactly 0, so a remote at rest does not jitter or drift.
+        self.gyro_deadband = (0.0,) * 3
+        self.gyro_ungated = None   # the rates before the gate (calibrations measure these)
         self.gyro_blocks = None
         self.nunchuk_calibration = None
         self.extension = None
@@ -173,7 +177,9 @@ class ReportParser:
                 else:
                     value = (raw[i] - self.gyro_zero[i]) / 13.768 * (1 if slow[i] else 2000 / 440)
                 values.append((value - self.gyro_bias[i]) * self.gyro_scale[i])
-            s.gyro_raw, s.gyro_dps, s.gyro_timestamp_us = raw, tuple(values), now
+            self.gyro_ungated = tuple(values)
+            gated = tuple(0.0 if abs(v) < d else v for v, d in zip(values, self.gyro_deadband))
+            s.gyro_raw, s.gyro_dps, s.gyro_timestamp_us = raw, gated, now
             s.orientation = list(self.orientation.update(s.accel_g, s.gyro_dps, now))
             if not p[4] & 1:
                 s.nunchuk = None

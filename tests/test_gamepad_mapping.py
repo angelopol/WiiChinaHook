@@ -282,3 +282,15 @@ def test_startup_mode_validation():
     for bad in (0, 5, "2", True):
         with pytest.raises(ValueError):
             validate_config({"startup_mode": bad})
+
+
+def test_a_plus_b_modifier_switches_modes_with_the_arrows():
+    engine = MappingEngine()
+    engine.process(state(A | B, t=0.0), TEMPLATE, "wm_a+wm_b")
+    out, request = engine.process(state(A | B | RIGHT, t=0.1), TEMPLATE, "wm_a+wm_b")
+    assert request == 2 and "DPAD_RIGHT" not in out.buttons       # the arrow is swallowed
+    engine.process(state(0, t=0.2), TEMPLATE, "wm_a+wm_b")
+    engine.process(state(B, t=0.3), TEMPLATE, "wm_a+wm_b")
+    out, request = engine.process(state(B | RIGHT, t=0.4), TEMPLATE, "wm_a+wm_b")
+    assert request is None and "DPAD_RIGHT" in out.buttons         # B alone is not the modifier now
+    assert validate_config({"modifier": "wm_a+wm_b"})["modifier"] == "wm_a+wm_b"

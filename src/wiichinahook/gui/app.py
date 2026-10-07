@@ -113,10 +113,17 @@ class SlotCard:
         self.quick_switch = ft.Switch(label=t("quick_calibration"), value=options.quick_calibration,
                                       tooltip=t("quick_calibration_hint"),
                                       on_change=lambda e: self.option_changed(quick_calibration=e.control.value))
-        self.combo_select = ft.Dropdown(value=options.combo, width=150, dense=True, label=t("combo"),
+        self.combo_select = ft.Dropdown(value=options.combo, width=190, dense=True, label=t("combo"),
                                         options=[ft.DropdownOption(k, t(f"combo_{k.replace('+', '_')}"))
                                                  for k in COMBOS],
                                         on_select=lambda e: self.option_changed(combo=e.control.value))
+        self.combo_hold = ft.TextField(value=str(options.combo_hold_ms), label=t("combo_hold_ms"), width=110,
+                                       dense=True, tooltip=t("combo_hold_hint"), data=("combo_hold_ms", 200, 3000),
+                                       on_blur=self.on_combo_ms, on_submit=self.on_combo_ms)
+        self.combo_window = ft.TextField(value=str(options.combo_window_ms), label=t("combo_window_ms"),
+                                         width=120, dense=True, tooltip=t("combo_window_hint"),
+                                         data=("combo_window_ms", 0, 1000),
+                                         on_blur=self.on_combo_ms, on_submit=self.on_combo_ms)
         self.ir_switch = ft.Switch(label=t("ir_calibration"), value=options.ir_calibration,
                                    tooltip=t("ir_calibration_hint"),
                                    on_change=lambda e: self.option_changed(ir_calibration=e.control.value))
@@ -125,6 +132,7 @@ class SlotCard:
             ft.Button(t("rumble"), icon=ft.Icons.VIBRATION, on_click=self.on_rumble),
             ft.Button(t("sound_test"), icon=ft.Icons.VOLUME_UP, on_click=self.on_sound, tooltip=t("sound_test_hint")),
             ft.Button(t("calibrate"), icon=ft.Icons.TUNE, on_click=self.on_calibrate, tooltip=t("calibrate_hint")),
+            ft.Button(t("noise"), icon=ft.Icons.GRAIN, on_click=self.on_noise, tooltip=t("noise_hint")),
             ft.Button(t("scale"), icon=ft.Icons.STRAIGHTEN, on_click=self.on_scale, tooltip=t("scale_hint")),
             ft.TextButton(t("forget"), icon=ft.Icons.DELETE_OUTLINE, on_click=self.on_forget),
         ]
@@ -156,7 +164,8 @@ class SlotCard:
             ]),
             ft.Row(self.action_controls, wrap=True, spacing=6),
             ft.Row([ft.Text(t("leds"), size=12), *self.leds], spacing=2),
-            ft.Row([self.quick_switch, self.combo_select, self.ir_switch], wrap=True, spacing=12,
+            ft.Row([self.quick_switch, self.combo_select, self.combo_hold, self.combo_window, self.ir_switch],
+                   wrap=True, spacing=12,
                    vertical_alignment=ft.CrossAxisAlignment.CENTER),
         ])))
         self.render(None)
@@ -242,6 +251,18 @@ class SlotCard:
             self.render_pose({"capabilities": {"motionplus": True}})
             self.pose_canvas.update()
 
+    def on_combo_ms(self, e):
+        """Hold time or combination window (ms) of the recalibration combination."""
+        key, low, high = e.control.data
+        try:
+            value = int(float(e.control.value))
+        except ValueError:
+            value = low - 1
+        if not low <= value <= high:
+            self.controller.notify(self.t("invalid", field=f"{key} ({low}–{high})"))
+            return
+        self.option_changed(**{key: value})
+
     def option_changed(self, **change):
         self.controller.page.run_task(self.controller.update_slot_options, self.slot, change)
 
@@ -259,6 +280,14 @@ class SlotCard:
         if await self.controller.command("calibrate", slot=self.slot) is not None:
             self.on_recenter(None)  # the calibration pose becomes the reference
             self.controller.notify(self.t("calibrated", n=self.slot))
+
+    async def on_noise(self, e):
+        """Gyro noise filter: 10 s on the table, then a per-axis dead band."""
+        self.controller.notify(self.t("noise_running"))
+        result = await self.controller.command("calibrate_noise", slot=self.slot, seconds=10, timeout=40)
+        if result is not None:
+            gate = " / ".join(f"{v:.1f}" for v in result["gyro_noise_dps"])
+            self.controller.notify(self.t("noise_done", gate=gate))
 
     def on_scale(self, e):
         t = self.t

@@ -61,6 +61,7 @@ class BarLink:
     writes/s) would stall input and DSU. Each slot is its own HID device, so the four
     writers run in parallel; one handle never gets concurrent writes (hidapi forbids it)."""
     psm = 0x13
+    thread_safe_write = True   # write() only enqueues for the writer thread (speaker.stream)
 
     def __init__(self, path, loop, opener=None):
         if opener is None:
@@ -276,6 +277,9 @@ class DolphinBarManager:
         if settings.get("gyro_scale_frame") == GYRO_SCALE_FRAME:  # older factors used wrong axes
             session.parser.gyro_scale = tuple(settings["gyro_scale"])
             state.calibration["gyro_scale"] = list(session.parser.gyro_scale)
+        if settings.get("gyro_noise"):
+            session.parser.gyro_deadband = tuple(settings["gyro_noise"])
+            state.calibration["gyro_noise_dps"] = list(session.parser.gyro_deadband)
         self.sessions[slot] = session
         session.apply_options(self.slot_options[slot])
         session.on_bias_changed = lambda bias: self.store.update(slot, gyro_bias=list(bias))
@@ -327,7 +331,8 @@ class DolphinBarManager:
         """Change a slot's quick/IR calibration options live (the GUI also saves them)."""
         if not isinstance(slot, int) or slot not in range(4):
             raise ValueError("slot must be 0..3")
-        unknown = set(changes) - {"quick_calibration", "combo", "ir_calibration"}
+        unknown = set(changes) - {"quick_calibration", "combo", "ir_calibration", "combo_hold_ms",
+                                 "combo_window_ms"}
         if unknown:
             raise ValueError(f"Unknown option: {', '.join(sorted(unknown))}")
         current = asdict(self.slot_options[slot])
@@ -338,6 +343,13 @@ class DolphinBarManager:
             if session.state.slot == slot:
                 session.apply_options(options)
         return dict(asdict(options), slot=slot)
+
+    async def calibrate_noise(self, slot, seconds=10.0, reset=False):
+        session = self.session_for(slot)
+        result = session.clear_noise() if reset else await session.calibrate_noise(seconds)
+        self.store.update(slot, gyro_bias=list(session.parser.gyro_bias),
+                          gyro_noise=list(session.parser.gyro_deadband))
+        return result
 
     async def calibrate_axis(self, slot, axis):
         session = self.session_for(slot)

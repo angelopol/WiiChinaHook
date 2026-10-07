@@ -38,6 +38,7 @@ SYSTEM_ACTIONS = ("mute", "volume_up", "volume_down", "next_track", "previous_tr
                   "start_menu")
 ACTION_TYPES = ("keys", "mouse", "system", "open", "toggle")
 STICK_THRESHOLD = 0.5          # Nunchuk stick deflection that counts as a direction press
+MODIFIER_WINDOW = 0.06         # s the members of a two-button modifier wait for each other
 SCROLL_DELAY, SCROLL_REPEAT = 0.4, 0.08
 
 # Key name -> (virtual-key code, extended). Letters, digits and F-keys are added below.
@@ -80,6 +81,9 @@ PC_TEMPLATE = {
         "stick_deadzone": 0.15,
         "ir_range": 0.5,          # fraction of the IR image that spans the whole screen
         "ir_smoothing": 0.5,      # 0 = raw IR, 0.9 = very smooth (and slower)
+        # Gyro mouse: the quick calibration also puts the pointer in the centre of the
+        # screen (the remote is recentred at the same time, so both line up again).
+        "recenter_on_calibration": True,
     },
     "shake_g": 1.3,
     "buttons": {
@@ -164,6 +168,8 @@ def validate_pc_template(template: dict) -> dict:
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not low <= value <= high:
             raise ValueError(f"mouse {key} must be {low}..{high}")
         mouse[key] = float(value)
+    if not isinstance(mouse["recenter_on_calibration"], bool):
+        raise ValueError("mouse recenter_on_calibration must be true or false")
     result["mouse"] = {k: mouse[k] for k in PC_TEMPLATE["mouse"]}
     shake = template.get("shake_g", PC_TEMPLATE["shake_g"])
     if isinstance(shake, bool) or not isinstance(shake, (int, float)) or not 0.2 <= shake <= 6:
@@ -206,6 +212,8 @@ class PcEngine:
     """One per remote while a PC mode is active: turns its inputs into mouse and
     keyboard events on `output` (winput.WindowsInput or a test double)."""
 
+    UNSEEN = object()
+
     def __init__(self, output):
         self.output = output
         self.down = set()            # inputs currently pressed (as this engine saw them)
@@ -214,11 +222,13 @@ class PcEngine:
         self.toggles = {}            # input -> next step index
         self.scroll = {}             # input -> (delta, next repeat time)
         self.deferred = set()        # the modifier: its action fires on release
+        self.pending = {}            # members of a two-button modifier waiting for each other
         self.wm_shake, self.nc_shake = ShakeDetector(), ShakeDetector()
         self.last_t = None
         self.carry = [0.0, 0.0]      # sub-pixel remainders of relative motion
         self.dpad_since = None
         self.ir_pos = None
+        self.recenter_seq = self.UNSEEN   # last quick calibration seen (recenter_seq)
 
     # -- inputs -----------------------------------------------------------------
     def inputs(self, state, pressed, template, t):
@@ -247,15 +257,33 @@ class PcEngine:
         claimed = set(MOUSE_CLAIMS.get(template["mouse"]["source"], ()))
         active -= self.ignored | claimed
         actions = template["buttons"]
+        members = modifier.split("+") if "+" in modifier else []
+        if members and all(m in active for m in members):      # the A + B gesture: no clicks
+            self.ignored |= set(members)
+            active -= set(members)
+            for m in members:
+                self.pending.pop(m, None)
+        for source, since in list(self.pending.items()):      # the partner did not come
+            if source not in active:
+                del self.pending[source]
+                self.press(source, actions[source], t)         # a quick tap still acts
+                self.release(source)
+            elif t - since >= MODIFIER_WINDOW:
+                del self.pending[source]
+                self.press(source, actions[source], t)
         for source in sorted(active - self.down):             # newly pressed
             action = actions.get(source)
             if not action:
                 continue
             if source == modifier:
                 self.deferred.add(source)
+            elif source in members:
+                self.pending[source] = t
             else:
                 self.press(source, action, t)
         for source in sorted(self.down - active):             # released
+            if source in self.pending:
+                continue                                       # handled above
             self.release(source)
             if source in self.deferred:
                 self.deferred.discard(source)
@@ -318,6 +346,16 @@ class PcEngine:
     def move(self, state, pressed, template, t):
         mouse = template["mouse"]
         source = mouse["source"]
+        seq = (state.get("calibration") or {}).get("recenter_seq")
+        if self.recenter_seq is self.UNSEEN:
+            self.recenter_seq = seq                      # entering the mode: just note it
+        elif seq != self.recenter_seq:                   # a quick calibration happened
+            self.recenter_seq = seq
+            if source == "gyro" and mouse["recenter_on_calibration"]:
+                self.carry = [0.0, 0.0]
+                self.output.move_abs(0.5, 0.5)           # pointer back to the centre
+                self.last_t = t
+                return
         dt = 0.0 if self.last_t is None else max(0.0, min(0.05, t - self.last_t))
         self.last_t = t
         if source == "ir":

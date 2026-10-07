@@ -193,14 +193,39 @@ azul: girar, verde: mantener) y los zigzags marcan las vibraciones. Los GIF se g
 con el propio modelo 3D de la app mediante `tools/make_calibration_gifs.py` (requiere el
 extra `[dev]`).
 
+### Filtro de ruido del giroscopio
+
+El giroscopio de algunos mandos vibra en reposo (lecturas de ±1–2 °/s con el mando
+quieto). Se nota como una vista 3D que tiembla, un stick de apuntado o ratón PC que se
+mueve solo, y deriva.
+
+**Ruido del giroscopio**, en la tarjeta del mando (o `wiichinahook calibrate --noise --slot N`),
+lo corrige:
+
+1. Deja el mando sobre la mesa, sin tocarlo, **10 segundos**. Una vibración corta marca
+   el inicio.
+2. La app mide el ruido y el sesgo de cada eje.
+3. Corrige el sesgo y fija una **banda muerta por eje**, justo por encima del ruido
+   medido. Las lecturas por debajo pasan a ser exactamente 0; los movimientos reales no
+   cambian.
+4. Doble vibración: hecho. Una larga indica que el mando se movió, así que repítelo.
+
+El filtro se guarda por mando. Se aplica en todo: la vista 3D, el stick de apuntado, el
+ratón del modo PC y DSU (Dolphin/Cemu). `calibrate --noise --reset` lo quita.
+
 ### Calibración rápida y calibración con la barra sensora
 
 Las dos son por mando (slot), vienen desactivadas y se cambian en vivo desde cada
 tarjeta de la GUI:
 
 - **Calibración rápida**: como el botón de recentrar de juegos como *Zelda: Skyward
-  Sword*. Mantén la combinación elegida (− y +, ↓, 1 y 2, A y B, o Home) ~0,6 s:
-  vibración corta, deja el mando quieto ~1 s. Una doble vibración indica que se renovó el
+  Sword*. Mantén la combinación elegida (− y +, ↓, 1 y 2, A y B, Home, o − + Home + +)
+  el tiempo de **Mantener (ms)** de la tarjeta (600 ms por defecto, 200–3000): vibración
+  corta, deja el mando quieto ~1 s. Los botones de una combinación de varios botones nunca
+  llegan al juego (Xbox, DSU ni PC). Cada uno no hace nada durante el **Margen (ms)** de la tarjeta
+  (100 ms por defecto, 0–1000) mientras pueden llegar los demás, y si no llegan sale solo;
+  y con la combinación completa siguen ocultos hasta soltarlos. Un toque rápido de uno sí
+  sale. Una doble vibración indica que se renovó el
   sesgo del giroscopio y se recentró la orientación; una larga, que se movió y solo se
   recentró. Déjala desactivada en juegos que calibran por sí mismos.
 
@@ -257,7 +282,9 @@ El servidor DSU siempre anuncia los mandos conectados, pero solo envía sus entr
 modo DSU. En los demás modos aparecen conectados y sin actividad, así que un juego nunca
 recibe el mismo mando dos veces (como Xbox y como DSU).
 
-**Cambiar de modo desde el mando:** mantén el modificador (por defecto **B**) y pulsa una
+**Cambiar de modo desde el mando:** mantén el modificador (por defecto **B**; también **A + B**
+a la vez, A, −, +, 1, 2, o Home solo por Bluetooth, porque la DolphinBar usa Home + cruceta para
+sí misma) y pulsa una
 flecha, en sentido horario: ↑ modo 1, → modo 2, ↓ modo 3, ← modo 4. La flecha no se envía
 al juego y B sigue funcionando como su gatillo. Cada mando hace parpadear tres veces su
 LED N y vibra tantas veces como el número del modo antes de volver a su LED de jugador; una vibración larga extra indica que el modo usa entradas que ese mando

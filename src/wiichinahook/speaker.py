@@ -217,10 +217,14 @@ def _schedule_off(session):
 
 
 async def stream(session, adpcm: bytes, period=REPORT_PERIOD):
-    """Send `adpcm` in 0x18 reports at a steady pace (see the module docstring)."""
+    """Send `adpcm` in 0x18 reports at a steady pace (see the module docstring).
+    A channel whose write is thread-safe (the DolphinBar link queues to its own
+    writer thread) gets the reports straight from the pacing thread, so a busy event
+    loop cannot bunch them up; others (Bumble's L2CAP) get them through the loop."""
     loop = asyncio.get_running_loop()
     done = loop.create_future()
     stop = threading.Event()
+    direct = getattr(session.channels.get(0x13), "thread_safe_write", False)
 
     def deliver(chunk):
         if stop.is_set() or session.closed:
@@ -239,13 +243,26 @@ async def stream(session, adpcm: bytes, period=REPORT_PERIOD):
     def pace():
         try:
             start = time.perf_counter()
+            sent = None
             for index, offset in enumerate(range(0, len(adpcm), BYTES_PER_REPORT)):
                 if stop.is_set():
                     break
-                delay = start + index * period - time.perf_counter()
+                now = time.perf_counter()
+                delay = start + index * period - now
+                if delay < -period and sent is not None:
+                    # More than a report behind (the OS stalled this thread): carry on one
+                    # period after the last report. Catching up in a burst would overflow
+                    # the remote's small buffer and garble the sound.
+                    start = sent + period - index * period
+                    delay = start + index * period - now
                 if delay > 0:
                     time.sleep(delay)
-                loop.call_soon_threadsafe(deliver, adpcm[offset:offset + BYTES_PER_REPORT])
+                sent = time.perf_counter()
+                chunk = adpcm[offset:offset + BYTES_PER_REPORT]
+                if direct:
+                    deliver(chunk)
+                else:
+                    loop.call_soon_threadsafe(deliver, chunk)
             if not stop.is_set():
                 time.sleep(2 * period)        # let the remote play its last buffered report
             loop.call_soon_threadsafe(finish)

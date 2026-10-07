@@ -47,8 +47,7 @@ def rumbles(channel):
 
 
 async def test_combo_must_be_held_and_fires_once(monkeypatch):
-    session, _ = make_session(quick_calibration=True, combo="minus+plus")
-    session.COMBO_HOLD = 0.05
+    session, _ = make_session(quick_calibration=True, combo="minus+plus", combo_hold_ms=50)
     calls = []
     async def fake():
         calls.append(1)
@@ -69,7 +68,6 @@ async def test_combo_must_be_held_and_fires_once(monkeypatch):
 
 async def test_combo_ignored_when_disabled():
     session, _ = make_session(quick_calibration=False, combo="home")
-    session.COMBO_HOLD = 0.0
     session.quick_calibrate = AsyncMock()
     session.receive(buttons_report(0x0080))
     session.receive(buttons_report(0x0080))
@@ -154,7 +152,8 @@ async def test_live_slot_options_through_the_api(tmp_path):
     manager.sessions[2] = session
     api = ApiServer(manager)
     result = await api.dispatch("slot_options", {"slot": 2, "quick_calibration": True, "combo": "one+two"})
-    assert result == {"slot": 2, "quick_calibration": True, "combo": "one+two", "ir_calibration": False}
+    assert result == {"slot": 2, "quick_calibration": True, "combo": "one+two", "ir_calibration": False,
+                      "combo_hold_ms": 600, "combo_window_ms": 100}
     assert applied == [SlotOptions(True, "one+two", False)]
     with pytest.raises(ValueError, match="combo"):
         await api.dispatch("slot_options", {"slot": 2, "combo": "shake"})
@@ -163,3 +162,82 @@ async def test_live_slot_options_through_the_api(tmp_path):
 def replace_state_dir(tmp_path):
     from dataclasses import replace
     return replace(AppConfig(), state_dir=tmp_path)
+
+
+async def test_recalibration_combo_buttons_never_reach_the_outputs():
+    published = []
+    session = WiimoteSession(WiimoteState(), AsyncMock(), lambda state: published.append(state.buttons))
+    session.attach(Channel())
+    session.initialized = True
+    session.state.capabilities["motionplus"] = True
+    session.apply_options(SlotOptions(quick_calibration=True, combo="minus+home+plus", combo_hold_ms=200))
+    session.quick_calibrate = AsyncMock()
+    MINUS, HOME, PLUS, A = 0x0010, 0x0080, 0x1000, 0x0008
+    session.receive(buttons_report(MINUS | A))           # − first: held back, A goes out at once
+    assert published[-1] == A
+    await asyncio.sleep(0.03)
+    session.receive(buttons_report(MINUS | HOME | A))    # Home 30 ms later
+    session.receive(buttons_report(MINUS | HOME | PLUS | A))   # the whole combination
+    assert published[-1] == A                           # none of −, Home, + is ever sent
+    await asyncio.sleep(0.25)
+    session.receive(buttons_report(MINUS | HOME | PLUS))
+    await asyncio.sleep(0)                              # the recalibration runs as a task
+    assert session.quick_calibrate.await_count == 1     # held 200 ms: recalibrates
+    session.receive(buttons_report(MINUS))                # Home and + released, − still held
+    assert published[-1] == 0                           # stays hidden until released
+    session.receive(buttons_report(0))
+    assert all(not b & (MINUS | HOME | PLUS) for b in published)
+    session.receive(buttons_report(PLUS))               # + on its own: after the window it is sent
+    await asyncio.sleep(0.1)
+    session.receive(buttons_report(PLUS))
+    assert published[-1] == PLUS
+    session.receive(buttons_report(0))
+    session.receive(buttons_report(HOME))               # a quick tap of Home still goes out
+    await asyncio.sleep(0.02)
+    session.receive(buttons_report(0))
+    assert published[-1] == HOME
+    await session.close()
+
+
+def test_combo_hold_time_is_validated_and_saved(tmp_path):
+    from wiichinahook.config import slot_options_from
+    assert slot_options_from({"combo": "minus+home+plus", "combo_hold_ms": 900}).combo_hold_ms == 900
+    assert slot_options_from({"combo": "one+home+plus"}).combo == "minus+home+plus"   # earlier saved name
+    for bad in (100, 5000, True):
+        with pytest.raises(ValueError):
+            slot_options_from({"combo_hold_ms": bad})
+    path = tmp_path / "config.json"
+    save_config(AppConfig(slots=(SlotOptions(combo="minus+home+plus", combo_hold_ms=1200),) * 4), path)
+    assert load_config(path).slots[0].combo_hold_ms == 1200
+
+
+async def test_combination_window_is_configurable_per_remote():
+    published = []
+    session = WiimoteSession(WiimoteState(), AsyncMock(), lambda state: published.append(state.buttons))
+    session.attach(Channel())
+    session.initialized = True
+    session.apply_options(SlotOptions(quick_calibration=True, combo="minus+home+plus", combo_window_ms=300))
+    session.quick_calibrate = AsyncMock()
+    HOME, PLUS = 0x0080, 0x1000
+    session.receive(buttons_report(HOME))
+    await asyncio.sleep(0.15)
+    session.receive(buttons_report(HOME))
+    assert published[-1] == 0                       # 150 ms in a 300 ms window: Home does nothing yet
+    session.receive(buttons_report(HOME | PLUS))
+    assert published[-1] == 0                       # + 150 ms after Home: still a possible combination
+    await asyncio.sleep(0.2)
+    session.receive(buttons_report(HOME | PLUS))
+    assert published[-1] == HOME                    # Home's own 300 ms are over; + still waits
+    await asyncio.sleep(0.15)
+    session.receive(buttons_report(HOME | PLUS))
+    assert published[-1] == HOME | PLUS             # + too: combination never completed, both act
+    session.receive(buttons_report(0))
+    session.apply_options(SlotOptions(quick_calibration=True, combo="minus+home+plus", combo_window_ms=0))
+    session.receive(buttons_report(HOME))
+    assert published[-1] == HOME                    # window 0: no wait at all
+    from wiichinahook.config import slot_options_from
+    assert slot_options_from({}).combo_window_ms == 100
+    for bad in (-1, 1001, True):
+        with pytest.raises(ValueError):
+            slot_options_from({"combo_window_ms": bad})
+    await session.close()

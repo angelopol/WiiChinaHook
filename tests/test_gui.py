@@ -267,3 +267,14 @@ def test_pc_editor_round_trip_and_mouse_claims():
     assert result["mouse"]["source"] == "wm_dpad" and result["buttons"]["wm_up"] is None
     assert result["buttons"]["wm_1"] == "keys:ctrl+9"
     assert result["buttons"]["wm_2"] == "toggle:system:mute | system:mute"
+
+
+def test_home_modifier_is_not_offered_with_a_dolphinbar():
+    pytest.importorskip("flet")
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from wiichinahook.gui.gamepad_tab import GamepadTab
+    bar = GamepadTab(SimpleNamespace(t=Translator("en"), config=AppConfig(), page=None))
+    assert "wm_home" not in bar.modifiers() and "wm_a+wm_b" in bar.modifiers()
+    bt = GamepadTab(SimpleNamespace(t=Translator("en"), config=replace(AppConfig(), mode="bluetooth"), page=None))
+    assert "wm_home" in bt.modifiers()

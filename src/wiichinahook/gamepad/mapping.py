@@ -34,7 +34,13 @@ BUTTON_TARGETS = ("A", "B", "X", "Y", "LB", "RB", "LT", "RT", "BACK", "START", "
 STICK_TARGETS = ("LEFT_STICK", "RIGHT_STICK")
 MODE_ARROWS = {"wm_up": 1, "wm_right": 2, "wm_down": 3, "wm_left": 4}   # clockwise
 MAX_CHORD = 3
-MODIFIERS = ("wm_b", "wm_a", "wm_home", "wm_minus", "wm_plus", "wm_1", "wm_2")
+# "wm_a+wm_b": both held. Home is refused behind a DolphinBar (the bar itself uses
+# Home + D-pad), see GamepadHub.forbidden_modifiers.
+MODIFIERS = ("wm_b", "wm_a+wm_b", "wm_a", "wm_home", "wm_minus", "wm_plus", "wm_1", "wm_2")
+
+
+def modifier_held(modifier, pressed):
+    return all(member in pressed for member in modifier.split("+"))
 
 GAME_TEMPLATE = {
     "type": "xbox",
@@ -271,7 +277,7 @@ class MappingEngine:
         self.previous = pressed
         self.suppressed &= pressed
         mode_request = None
-        if modifier in pressed:
+        if modifier_held(modifier, pressed):
             for arrow, mode in MODE_ARROWS.items():
                 if arrow in newly:
                     mode_request = mode

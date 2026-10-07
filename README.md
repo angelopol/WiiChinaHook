@@ -188,14 +188,37 @@ The yellow line is the axis being calibrated; the bar shows the phases (grey: st
 blue: turn, green: hold) and the zigzags mark the vibrations. The GIFs are rendered
 from the app's own 3D model by `tools/make_calibration_gifs.py` (needs the `[dev]` extra).
 
+### Gyro noise filter
+
+Some remotes' gyros jitter at rest (readings of ±1–2 °/s with the remote still). That
+shows up as a shaking 3D view, a twitching aim stick or PC mouse, and drift.
+
+**Gyro noise** on the remote's card (or `wiichinahook calibrate --noise --slot N`)
+fixes it:
+
+1. Leave the remote on a table, untouched, for **10 seconds**. A short vibration marks
+   the start.
+2. The app measures each axis' noise and its bias.
+3. It corrects the bias and sets a **dead band per axis**, just above the measured noise.
+   Readings below it become exactly 0; real movements pass unchanged.
+4. A double vibration means done. A long one means the remote moved, so try again.
+
+The filter is saved per remote. It applies everywhere: the 3D view, the aim stick, the
+PC mouse and DSU (Dolphin/Cemu). `calibrate --noise --reset` removes it.
+
 ### Quick calibration and sensor bar calibration
 
 Both are per remote (slot), off by default, and can be changed live from each card in
 the GUI:
 
 - **Quick calibration** — like the recenter button in games such as *Zelda: Skyward
-  Sword*. Hold the chosen combination (− and +, ↓, 1 and 2, A and B, or Home) for
-  ~0.6 s: short vibration, keep the remote still ~1 s. A double vibration means the gyro
+  Sword*. Hold the chosen combination (− and +, ↓, 1 and 2, A and B, Home, or − + Home
+  + +) for the card's **Hold (ms)** time (600 ms by default, 200–3000): short vibration,
+  keep the remote still ~1 s. The buttons of a multi-button combination never reach the
+  game (Xbox, DSU or PC). Each one does nothing for the card's **Window (ms)** (100 ms by default,
+  0–1000) while the others may still come, then goes out alone if they don't; and
+  once the whole combination is held they stay hidden until released. A quick tap of one
+  still goes out. A double vibration means the gyro
   bias was refreshed and the orientation recentered; a long one means it moved, so it
   was only recentered. Leave it off for games that calibrate by themselves.
 - **Sensor bar calibration** — while the IR camera sees both dots of the sensor bar and
@@ -243,7 +266,9 @@ The DSU server always lists the connected remotes, but it sends their input only
 DSU mode. In the other modes they appear connected and idle, so a game never receives
 the same remote twice (as Xbox and as DSU).
 
-**Switching modes on the remote:** hold the modifier (default **B**) and press an arrow,
+**Switching modes on the remote:** hold the modifier (default **B**; also **A + B** together,
+A, −, +, 1, 2, or Home over Bluetooth only, since the DolphinBar uses Home + D-pad for itself)
+and press an arrow,
 clockwise: ↑ mode 1, → mode 2, ↓ mode 3, ← mode 4. The arrow is not sent to the game,
 and B keeps working as its trigger. Every remote blinks LED N three times and rumbles
 the mode number before returning to its player LED; an extra long

@@ -151,3 +151,23 @@ async def test_event_sounds_only_when_enabled():
     assert played == [(len(speaker.encode_adpcm(speaker.BUILTIN["count"](2))), 0.3)]
     with pytest.raises(ValueError):
         await service.play(0, "chime", volume=3)
+
+
+async def test_a_stalled_pacer_resumes_the_pace_instead_of_bursting(monkeypatch):
+    session, channel = make_session()
+    real_sleep = speaker.time.sleep
+    stalled = [False]
+
+    def sleep(seconds):                                  # the OS stalls the thread once, 80 ms
+        if not stalled[0]:
+            stalled[0] = True
+            real_sleep(0.08)
+        real_sleep(seconds)
+
+    monkeypatch.setattr(speaker.time, "sleep", sleep)
+    channel.thread_safe_write = True                      # measure the pacer itself, not the loop
+    await speaker.stream(session, bytes(20 * 12))
+    audio = [t for t, data in channel.sent if data[1] == 0x18]
+    gaps = [b - a for a, b in zip(audio, audio[1:])]
+    assert len(audio) == 12
+    assert min(gaps) > 0.008                             # no burst of overdue reports after the stall

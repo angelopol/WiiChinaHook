@@ -212,3 +212,15 @@ def test_startup_mode_fixed_or_last_active(tmp_path):
     assert startup_gamepad(fixed)["mode"] == 2                   # a fixed startup mode wins
     (tmp_path / "gamepad_mode.json").write_text("{broken", encoding="utf-8")
     assert read_last_mode(tmp_path) is None and startup_gamepad(config)["mode"] == 1
+
+
+def test_home_cannot_be_the_modifier_behind_a_dolphinbar():
+    import pytest
+    hub = GamepadHub({"modifier": "wm_home"}, pad_factory=FakePad, forbidden_modifiers={"wm_home"})
+    assert hub.config["modifier"] == "wm_b"                        # an old config falls back to B
+    with pytest.raises(ValueError, match="DolphinBar"):
+        hub.set_config({"modifier": "wm_home"})
+    hub.set_config({"modifier": "wm_a+wm_b"})
+    assert hub.config["modifier"] == "wm_a+wm_b"
+    open_hub = GamepadHub({"modifier": "wm_home"}, pad_factory=FakePad)   # Bluetooth: allowed
+    assert open_hub.config["modifier"] == "wm_home"

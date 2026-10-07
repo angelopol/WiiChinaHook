@@ -57,9 +57,16 @@ speaker. It replies when the sound ends with `slot`, `sound` and `seconds`, and 
 sound cuts the one playing. `speaker_config` (`{"config": {...}}`) replaces the event
 sounds (`enabled`, `volume`, `events`); see [SPEAKER.md](SPEAKER.md).
 
-`slot_options` changes a slot's quick/sensor-bar calibration options live (only the
+`slot_options` (`quick_calibration`, `combo` — `minus+plus`, `down`, `one+two`, `a+b`, `home`,
+`minus+home+plus` —, `combo_hold_ms` 200–3000, `combo_window_ms` 0–1000, `ir_calibration`) changes a slot's quick/sensor-bar
+calibration options live (only the
 given fields; the reply has all of them) and `quick_calibrate` runs the same quick
 calibration as the button combination (reply `{"bias_updated": true|false}`).
+
+`calibrate_noise` (`{"slot": 0, "seconds": 10}`, 10–30 s) measures the gyro noise with the remote
+resting and sets a per-axis noise gate (also corrects the bias); it replies with
+`gyro_noise_dps` (the gate), `noise_dps`, `bias_dps` and `samples`, or fails if the remote moved.
+`{"slot": 0, "reset": true}` removes the gate. The state's `calibration.gyro_noise_dps` shows it.
 
 `calibrate_axis` (axis `pitch`, `roll` or `yaw`) runs the guided MotionPlus scale
 calibration described in the README and replies after about 7 s with `factor`,

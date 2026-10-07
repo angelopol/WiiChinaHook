@@ -147,6 +147,10 @@ def main() -> None:
         if name == "calibrate":
             client.add_argument("--axis", choices=("pitch", "roll", "yaw"),
                                 help="MotionPlus scale/sign calibration of one axis instead of the bias")
+            client.add_argument("--noise", action="store_true",
+                                help="gyro noise filter: leave the remote on a table, untouched")
+            client.add_argument("--seconds", type=float, help="noise calibration length, 10..30 (default 10)")
+            client.add_argument("--reset", action="store_true", help="with --noise: remove the noise filter")
     args = parser.parse_args()
     logging.basicConfig(level=logging.DEBUG if getattr(args, "verbose", False) else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -215,8 +219,15 @@ async def command_api(args):
     from websockets.asyncio.client import connect
     values = {k: v for k, v in vars(args).items() if k not in ("command", "url") and v is not None}
     command = "subscribe" if args.command == "monitor" else args.command
-    if command == "calibrate" and "axis" in values:
+    if command == "calibrate" and values.pop("noise", False):
+        command = "calibrate_noise"
+    elif command == "calibrate" and "axis" in values:
         command = "calibrate_axis"
+    if command == "calibrate" or command == "calibrate_axis":
+        values.pop("reset", None)
+        values.pop("seconds", None)
+    if not values.get("reset", True):
+        values.pop("reset")
     if command == "gamepad" and "mode" in values:
         command = "gamepad_mode"
     if command == "sound":
@@ -228,7 +239,7 @@ async def command_api(args):
         async with connect(args.url, open_timeout=5, max_size=262144) as websocket:
             await websocket.send(json.dumps(request))
             while True:
-                reply = json.loads(await asyncio.wait_for(websocket.recv(), 30))
+                reply = json.loads(await asyncio.wait_for(websocket.recv(), 60))
                 print(json.dumps(reply, ensure_ascii=False, indent=2), flush=True)
                 if reply.get("ok") is False:
                     raise SystemExit(1)

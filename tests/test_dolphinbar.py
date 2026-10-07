@@ -265,3 +265,22 @@ async def test_remote_leaving_the_bar_is_detected_despite_stale_reports(tmp_path
     assert 0 not in manager.sessions
     assert not manager.states[0].connected
     assert manager.states[0].error == "No HID reports for 10 seconds"
+
+
+async def test_gyro_noise_filter_is_stored_per_slot_and_reused(tmp_path):
+    clone = FakeClone()
+    manager, _ = manager_with(tmp_path, {2: clone})
+    session = await connect(manager, 2)
+    async def fake_noise(seconds):
+        session.parser.gyro_deadband = (2.5, 1.3, 0.4)
+        return {"gyro_noise_dps": [2.5, 1.3, 0.4]}
+    session.calibrate_noise = fake_noise
+    await manager.calibrate_noise(2, 10.0)
+    await close_all(manager)
+    manager2, _ = manager_with(tmp_path, {2: FakeClone()})
+    session2 = await connect(manager2, 2)
+    assert session2.parser.gyro_deadband == (2.5, 1.3, 0.4)
+    assert session2.state.calibration["gyro_noise_dps"] == [2.5, 1.3, 0.4]
+    await manager2.calibrate_noise(2, reset=True)                 # remove the filter
+    assert session2.parser.gyro_deadband == (0.0, 0.0, 0.0) and manager2.store.get(2)["gyro_noise"] == [0, 0, 0]
+    await close_all(manager2)

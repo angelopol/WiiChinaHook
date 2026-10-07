@@ -178,6 +178,8 @@ async def test_four_speakers_stream_in_parallel_at_full_rate():
     from tests.test_speaker import make_session
     from wiichinahook import speaker
     pairs = [make_session() for _ in range(4)]
+    for _, channel in pairs:
+        channel.thread_safe_write = True                  # like the DolphinBar link: no loop hop
     sound = bytes(range(200))                            # 10 reports, ~133 ms each remote
     start = time.perf_counter()
     await asyncio.gather(*(speaker.play(session, sound, 0.5) for session, _ in pairs))

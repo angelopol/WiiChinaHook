@@ -25,7 +25,10 @@ Whatever moves the mouse **cannot also be mapped**. With the D-pad or the Nunchu
 as the mouse, their rows are disabled in the editor and the configuration refuses
 them.
 
-With the gyroscope, the quick calibration (*Controllers* tab) removes the drift. If the
+With the gyroscope, the quick calibration (*Controllers* tab) removes the drift and, with
+**Recenter the mouse when recalibrating** (on by default), also puts the pointer in the
+centre of the screen. Point the remote at the centre while you recalibrate, and remote and
+pointer line up again. If the
 pointer still creeps, raise the dead zone a little.
 
 ## Actions
@@ -75,7 +78,8 @@ aliases also work (`control`, `escape`, `del`, `pgup`…), in any case.
 
 - **Mode switching still works:** modifier (B) + arrow. In PC mode the modifier's action
   fires **when you release it**, and only if you didn't switch modes. B + arrow never
-  right-clicks.
+  right-clicks. With the **A + B** modifier, A and B wait 60 ms for each other: pressed
+  together they are the modifier and click nothing; alone they click as usual.
 - **Buttons held while the mode starts** (e.g. the B + ↓ that selected it) are ignored
   until you release them.
 - **Nothing stays pressed:** switching modes, changing the configuration or a remote

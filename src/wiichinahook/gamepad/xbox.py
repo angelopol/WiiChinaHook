@@ -71,8 +71,10 @@ class GamepadHub:
     (plus a long one if its active template uses inputs it does not have)."""
 
     def __init__(self, config=None, rumble=None, on_change=None, pad_factory=XboxPad, loop=None, blink=None,
-                 on_output=None, sound=None, pc_output=None):
-        self.config = validate_config(config if config is not None else DEFAULT_CONFIG)
+                 on_output=None, sound=None, pc_output=None, forbidden_modifiers=()):
+        # Modifiers the connection cannot use (Home behind a DolphinBar): fall back to B.
+        self.forbidden_modifiers = set(forbidden_modifiers)
+        self.config = self.allowed(validate_config(config if config is not None else DEFAULT_CONFIG))
         self.rumble = rumble              # async rumble(slot, duration_ms) or None
         self.blink = blink                # async blink(slot, led_mask): flash the mode's LED
         self.sound = sound                # sound(slot, mode): optional speaker cue
@@ -317,8 +319,18 @@ class GamepadHub:
         except Exception as exc:
             log.debug("Mode rumble slot %d: %s", slot, exc)
 
+    def allowed(self, config):
+        if config["modifier"] in self.forbidden_modifiers:
+            log.warning("Mode modifier %s is not available with this connection; using wm_b", config["modifier"])
+            config = dict(config, modifier="wm_b")
+        return config
+
     def set_config(self, config):
-        self.config = validate_config(config)
+        config = validate_config(config)
+        if config["modifier"] in self.forbidden_modifiers:
+            raise ValueError(f"{config['modifier']} cannot be the mode modifier with a DolphinBar "
+                             "(the bar uses Home + D-pad itself)")
+        self.config = config
         self.release_pc()
         if self.template is None:
             self.close()

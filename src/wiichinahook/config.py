@@ -67,7 +67,10 @@ COMBOS = {
     "one+two": 0x0002 | 0x0001,
     "a+b": 0x0008 | 0x0004,
     "home": 0x0080,
+    "minus+home+plus": 0x0010 | 0x0080 | 0x1000,
 }
+# Combination names saved by earlier versions -> current name.
+COMBO_ALIASES = {"one+home+plus": "minus+home+plus"}   # was a misreading of "− + Home + +"
 
 
 @dataclass(frozen=True)
@@ -78,11 +81,22 @@ class SlotOptions:
     combo: str = "minus+plus"
     # Correct the heading drift while the IR camera sees the sensor bar.
     ir_calibration: bool = False
+    # How long the combination must be held to recalibrate.
+    combo_hold_ms: int = 600
+    # How long each of its buttons waits for the others before acting on its own.
+    combo_window_ms: int = 100
 
 
 def slot_options_from(data) -> SlotOptions:
-    options = SlotOptions(bool(data.get("quick_calibration", False)), data.get("combo", "minus+plus"),
-                          bool(data.get("ir_calibration", False)))
+    hold = data.get("combo_hold_ms", 600)
+    if isinstance(hold, bool) or not isinstance(hold, (int, float)) or not 200 <= hold <= 3000:
+        raise ValueError("combo_hold_ms must be 200..3000")
+    window = data.get("combo_window_ms", 100)
+    if isinstance(window, bool) or not isinstance(window, (int, float)) or not 0 <= window <= 1000:
+        raise ValueError("combo_window_ms must be 0..1000")
+    combo = data.get("combo", "minus+plus")
+    options = SlotOptions(bool(data.get("quick_calibration", False)), COMBO_ALIASES.get(combo, combo),
+                          bool(data.get("ir_calibration", False)), int(hold), int(window))
     if options.combo not in COMBOS:
         raise ValueError(f"combo must be one of {', '.join(COMBOS)}")
     return options
@@ -193,7 +207,8 @@ def config_to_dict(config: AppConfig, base_dir: Path | None = None) -> dict:
         "state_dir": state_dir.as_posix(),
         "ir": config.ir,
         "motionplus": config.motionplus,
-        "slots": [{"quick_calibration": o.quick_calibration, "combo": o.combo, "ir_calibration": o.ir_calibration}
+        "slots": [{"quick_calibration": o.quick_calibration, "combo": o.combo, "ir_calibration": o.ir_calibration,
+                   "combo_hold_ms": o.combo_hold_ms, "combo_window_ms": o.combo_window_ms}
                   for o in config.slots],
         "gamepad": config.gamepad,
         "speaker": config.speaker,

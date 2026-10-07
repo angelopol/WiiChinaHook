@@ -82,7 +82,7 @@ class GamepadTab:
         self.mode_buttons = [ft.OutlinedButton(f"{t('gp_mode')} {n}", data=n, on_click=self.on_activate)
                              for n in range(1, 5)]
         self.modifier = ft.Dropdown(label=t("gp_modifier"), value=self.config["modifier"], width=220, dense=True,
-                                    options=[ft.DropdownOption(m, source_label(m, t)) for m in MODIFIERS],
+                                    options=[ft.DropdownOption(m, source_label(m, t)) for m in self.modifiers()],
                                     on_select=self.on_modifier)
         self.startup_mode = ft.Dropdown(
             label=t("gp_startup_mode"), width=220, dense=True,
@@ -129,6 +129,11 @@ class GamepadTab:
                    spacing=12, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             self.editor,
         ])
+
+    def modifiers(self):
+        """Home is not offered behind a DolphinBar: the bar uses Home + D-pad itself."""
+        dolphinbar = getattr(self.controller.config, "mode", "dolphinbar") == "dolphinbar"
+        return [m for m in MODIFIERS if not (dolphinbar and m == "wm_home")]
 
     def binding_row(self, target, template, sources):
         """Label + main input + up to two more held together (buttons and/or shakes)."""

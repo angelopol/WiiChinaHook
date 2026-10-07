@@ -52,6 +52,7 @@ class WiimoteSession:
         self.last_extension_probe = 0.0
         self.gyro_samples = None
         self.axis_samples = None
+        self.accel_samples = None
         self.options = SlotOptions()
         self.combo_since = None
         self.combo_fired = False
@@ -171,12 +172,16 @@ class WiimoteSession:
                         pending["seen"].update(range(offset, offset + count))
                         if len(pending["seen"]) == pending["size"]:
                             future.set_result(bytes(pending["data"]))
-        if self.gyro_samples is not None and self.state.gyro_timestamp_us == self.state.timestamp_us:
-            if all(self.parser.gyro_slow):
-                self.gyro_samples.append(self.state.gyro_dps)
+        # Calibrations see the rates before the noise gate (it would hide what they measure).
         new_gyro = self.state.gyro_timestamp_us == self.state.timestamp_us
+        if self.gyro_samples is not None and new_gyro:
+            if all(self.parser.gyro_slow):
+                self.gyro_samples.append(self.parser.gyro_ungated)
+                if self.accel_samples is not None and self.state.accel_g:
+                    self.accel_samples.append(self.state.accel_g)
         if self.axis_samples is not None and new_gyro and self.state.accel_g:
-            self.axis_samples.append((self.state.gyro_timestamp_us / 1e6, self.state.accel_g, self.state.gyro_dps))
+            self.axis_samples.append((self.state.gyro_timestamp_us / 1e6, self.state.accel_g,
+                                      self.parser.gyro_ungated))
         if report == 0x20:
             self.last_status = time.monotonic()
         requested_status = pending is not None and pending["report"] == 0x20
@@ -192,7 +197,9 @@ class WiimoteSession:
                 if (previous is not None and attached != previous) or (previous is None and attached != (self.parser.extension == "motionplus+nunchuk")):
                     self.schedule_reconfigure()
         if self.initialized:
-            self.check_combo()
+            raw = self.state.buttons
+            self.check_combo(raw)
+            self.state.buttons = self.combo_filter(raw)
         self.publish(self.state)
 
     # -- per-slot options ------------------------------------------------------
@@ -202,18 +209,51 @@ class WiimoteSession:
         if not options.ir_calibration:
             self.state.calibration.pop("heading", None)
         self.combo_since, self.combo_fired = None, False
+        self.combo_down, self.combo_latched, self.combo_taps = {}, 0, {}
 
-    COMBO_HOLD = 0.6  # seconds the combination must be held
+    COMBO_TAP = 0.06     # s a quick tap of one is still sent for
 
-    def check_combo(self):
+    def combo_filter(self, buttons):
+        """Hide the recalibration combination from every output (Xbox, DSU, PC, API):
+        a member of a multi-button combination does nothing for the slot's combination
+        window (combo_window_ms) while the others may still come; once
+        the whole combination is held its buttons stay hidden until released. A
+        member tapped on its own still goes out as a short press."""
         mask = COMBOS.get(self.options.combo, 0)
-        if not self.options.quick_calibration or not mask or self.state.buttons & mask != mask:
+        if not self.options.quick_calibration or bin(mask).count("1") < 2:
+            self.combo_down, self.combo_latched, self.combo_taps = {}, 0, {}
+            return buttons
+        now = time.monotonic()
+        window = self.options.combo_window_ms / 1000
+        waiting = 0
+        for bit in (1 << i for i in range(16) if mask >> i & 1):
+            if buttons & bit:
+                since = self.combo_down.setdefault(bit, now)
+                if not self.combo_latched & bit and now - since < window:
+                    waiting |= bit
+            elif bit in self.combo_down:                   # released
+                since = self.combo_down.pop(bit)
+                if not self.combo_latched & bit and now - since < window:
+                    self.combo_taps[bit] = now + self.COMBO_TAP
+                self.combo_latched &= ~bit
+        if buttons & mask == mask:
+            self.combo_latched |= mask
+        self.combo_taps = {bit: end for bit, end in self.combo_taps.items() if now < end}
+        taps = 0
+        for bit in self.combo_taps:
+            taps |= bit
+        return (buttons & ~(self.combo_latched | waiting)) | taps
+
+    def check_combo(self, buttons=None):
+        buttons = self.state.buttons if buttons is None else buttons
+        mask = COMBOS.get(self.options.combo, 0)
+        if not self.options.quick_calibration or not mask or buttons & mask != mask:
             self.combo_since, self.combo_fired = None, False
             return
         now = time.monotonic()
         if self.combo_since is None:
             self.combo_since = now
-        elif not self.combo_fired and now - self.combo_since >= self.COMBO_HOLD:
+        elif not self.combo_fired and now - self.combo_since >= self.options.combo_hold_ms / 1000:
             self.combo_fired = True  # once per press
             if not self.quick_task or self.quick_task.done():
                 self.quick_task = self.spawn(self.quick_calibrate())
@@ -546,6 +586,60 @@ class WiimoteSession:
             return self.state.calibration
         finally:
             self.gyro_samples = None
+
+    NOISE_MOVED_DPS = 12.0      # a 99th-percentile deviation above this = it was moved
+    NOISE_MOVED_G = 0.03        # accelerometer standard deviation that means it was touched
+    NOISE_MARGIN = 1.25         # gate = margin x the measured noise
+    NOISE_GATE_RANGE = (0.3, 10.0)
+
+    async def calibrate_noise(self, seconds=10.0):
+        """Remote resting on a table for `seconds`: measure each gyro axis' noise and
+        bias, correct the bias and set a per-axis noise gate just above the noise.
+        Rumble: short = start (do not touch), double = done, long = it moved."""
+        if not self.state.capabilities["motionplus"]:
+            raise ValueError("No MotionPlus detected")
+        if self.gyro_samples is not None or self.axis_samples is not None:
+            raise ValueError("Calibration already running")
+        await self.rumble(150)
+        await asyncio.sleep(0.4)                 # let the motor stop before measuring
+        self.gyro_samples, self.accel_samples = [], []
+        try:
+            await asyncio.sleep(seconds)
+            samples, accel = self.gyro_samples, self.accel_samples
+        finally:
+            self.gyro_samples = self.accel_samples = None
+        if len(samples) < 20 * seconds:
+            raise ValueError("Not enough gyro samples; is the remote connected and still?")
+        axes = list(zip(*samples))
+        means = [statistics.mean(axis) for axis in axes]
+        noise = []
+        for axis, mean in zip(axes, means):
+            deviations = sorted(abs(v - mean) for v in axis)
+            noise.append(deviations[int(0.99 * (len(deviations) - 1))])
+        moved = max(noise) > self.NOISE_MOVED_DPS or (
+            len(accel) > 10 and max(statistics.pstdev(a) for a in zip(*accel)) > self.NOISE_MOVED_G)
+        if moved:
+            await self.rumble(600)
+            raise ValueError("The remote moved during the noise calibration; leave it on the table untouched")
+        low, high = self.NOISE_GATE_RANGE
+        gate = tuple(round(min(high, max(low, self.NOISE_MARGIN * n)), 2) for n in noise)
+        self.parser.gyro_bias = tuple(old + mean / scale for old, mean, scale
+                                      in zip(self.parser.gyro_bias, means, self.parser.gyro_scale))
+        self.parser.gyro_deadband = gate
+        self.state.calibration["gyro_bias"] = list(self.parser.gyro_bias)
+        self.state.calibration["gyro_noise_dps"] = list(gate)
+        self.publish(self.state)
+        await self.rumble(120)
+        await asyncio.sleep(0.25)
+        await self.rumble(120)
+        return {"gyro_noise_dps": list(gate), "noise_dps": [round(n, 2) for n in noise],
+                "bias_dps": [round(m, 2) for m in means], "samples": len(samples)}
+
+    def clear_noise(self):
+        self.parser.gyro_deadband = (0.0,) * 3
+        self.state.calibration.pop("gyro_noise_dps", None)
+        self.publish(self.state)
+        return {"gyro_noise_dps": [0.0, 0.0, 0.0]}
 
     async def calibrate_axis(self, axis, still=1.2, turn=5.0):
         """Guided scale/sign calibration of one MotionPlus axis (see calibration.py).

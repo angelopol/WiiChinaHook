@@ -61,10 +61,17 @@ de ese mando. Responde al terminar con `slot`, `sound` y `seconds`, y un sonido 
 el que esté sonando. `speaker_config` (`{"config": {...}}`) reemplaza los sonidos de
 eventos (`enabled`, `volume`, `events`); ver [SPEAKER.es.md](SPEAKER.es.md).
 
-`slot_options` cambia en vivo las opciones de calibración rápida y por barra sensora de un
+`slot_options` (`quick_calibration`, `combo` — `minus+plus`, `down`, `one+two`, `a+b`, `home`,
+`minus+home+plus` —, `combo_hold_ms` 200–3000, `combo_window_ms` 0–1000, `ir_calibration`) cambia en vivo las opciones de
+calibración rápida y por barra sensora de un
 slot (solo los campos indicados; la respuesta los incluye todos) y `quick_calibrate`
 ejecuta la misma calibración rápida que la combinación de botones (respuesta
 `{"bias_updated": true|false}`).
+
+`calibrate_noise` (`{"slot": 0, "seconds": 10}`, 10–30 s) mide el ruido del giroscopio con el
+mando en reposo y fija un filtro por eje (también corrige el sesgo); responde con
+`gyro_noise_dps` (el filtro), `noise_dps`, `bias_dps` y `samples`, o falla si el mando se movió.
+`{"slot": 0, "reset": true}` lo quita. `calibration.gyro_noise_dps` del estado lo muestra.
 
 `calibrate_axis` (eje `pitch`, `roll` o `yaw`) ejecuta la calibración guiada de escala
 del MotionPlus descrita en el README y responde tras unos 7 s con `factor`,

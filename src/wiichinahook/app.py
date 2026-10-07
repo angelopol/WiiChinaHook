@@ -133,7 +133,10 @@ async def run_app(config, duration=None):
         if api:
             api.publish_gamepad(status)
 
+    # Behind a DolphinBar, Home + D-pad is the bar's own shortcut: Home cannot switch modes.
+    forbidden = {"wm_home"} if config.mode == "dolphinbar" else set()
     hub = GamepadHub(gamepad, rumble=rumble, blink=blink, loop=asyncio.get_running_loop(),
+                     forbidden_modifiers=forbidden,
                      sound=lambda slot, mode: speaker.event(slot, "mode", count=mode),
                      on_change=on_change,
                      on_output=lambda output: api.publish_xbox(output) if api else None)

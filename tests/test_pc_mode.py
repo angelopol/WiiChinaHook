@@ -192,3 +192,51 @@ async def test_hub_runs_pc_mode_and_releases_everything_on_mode_change_and_disco
     hub.update(gone)                                               # disconnected mid-press
     assert ("key", VK["9"], False) in out.take("key")
     hub.close()
+
+
+def test_two_button_modifier_pressed_together_does_not_click():
+    out = FakeOutput()
+    tpl = template(wm_a="mouse:left", wm_b="mouse:right")
+    engine = PcEngine(out)
+    step = lambda t, pressed: engine.update(snap(t), set(pressed), tpl, "wm_a+wm_b", t)
+    step(0.00, set())
+    step(0.01, {"wm_a"})
+    step(0.03, {"wm_a", "wm_b"})                                   # B 20 ms later: the gesture
+    step(0.20, {"wm_a", "wm_b"})
+    step(0.30, set())
+    assert out.take() == []                                        # no left or right click
+    step(0.40, {"wm_a"})                                           # A alone: clicks after the wait
+    step(0.48, {"wm_a"})
+    assert out.take() == [("button", "left", True)]
+    step(0.60, set())
+    assert out.take() == [("button", "left", False)]
+    step(0.70, {"wm_b"})                                           # a quick tap of B still clicks
+    step(0.72, set())
+    assert out.take() == [("button", "right", True), ("button", "right", False)]
+
+
+def test_quick_calibration_recentres_the_gyro_mouse():
+    out = FakeOutput()
+    tpl = validate_template({"type": "pc", "mouse": {"source": "gyro"}, "buttons": {}})
+    assert tpl["mouse"]["recenter_on_calibration"] is True             # on by default
+    engine = PcEngine(out)
+    calibrated = lambda t, seq: dict(snap(t, gyro=(0.0, 0.0, 0.0)), calibration={"recenter_seq": seq})
+    engine.update(calibrated(0.0, 3), set(), tpl, "wm_b", 0.0)         # entering the mode: no jump
+    assert out.take("abs") == []
+    engine.update(calibrated(0.1, 4), set(), tpl, "wm_b", 0.1)         # quick calibration fired
+    assert out.take("abs") == [("abs", 0.5, 0.5)]
+    engine.update(calibrated(0.2, 4), set(), tpl, "wm_b", 0.2)
+    assert out.take("abs") == []                                        # once per calibration
+    off = validate_template({"type": "pc", "mouse": {"source": "gyro", "recenter_on_calibration": False},
+                             "buttons": {}})
+    engine = PcEngine(out)
+    engine.update(calibrated(0.0, 1), set(), off, "wm_b", 0.0)
+    engine.update(calibrated(0.1, 2), set(), off, "wm_b", 0.1)
+    assert out.take("abs") == []                                        # switched off
+    stick = validate_template({"type": "pc", "mouse": {"source": "nc_stick"}, "buttons": {}})
+    engine = PcEngine(out)
+    engine.update(calibrated(0.0, 1), set(), stick, "wm_b", 0.0)
+    engine.update(calibrated(0.1, 2), set(), stick, "wm_b", 0.1)
+    assert out.take("abs") == []                                        # only the gyro mouse
+    with pytest.raises(ValueError):
+        validate_template({"type": "pc", "mouse": {"recenter_on_calibration": "yes"}, "buttons": {}})

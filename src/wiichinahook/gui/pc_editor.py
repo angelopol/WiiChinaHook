@@ -85,6 +85,8 @@ class PcEditor:
                                   options=[ft.DropdownOption(s, t(f"pc_mouse_src_{s}"))
                                            for s in ("none", *MOUSE_SOURCES)])
         self.numbers = {key: number(t(f"pc_{key}"), mouse[key]) for key in MOUSE_FIELDS}
+        self.recenter = ft.Switch(label=t("pc_recenter_on_calibration"), value=mouse["recenter_on_calibration"],
+                                  tooltip=t("pc_recenter_hint"))
         self.shake = number(t("pc_shake_g"), template["shake_g"], suffix="g")
         self.rows = {s: ActionRow(s, self.label(s), template["buttons"].get(s), t)
                      for s in (*WIIMOTE, *NUNCHUK, *AXIS_GESTURES)}
@@ -94,6 +96,7 @@ class PcEditor:
             section(t("pc_mouse"), ft.Icons.MOUSE, [
                 ft.Row([self.source]),
                 ft.Row([n["gyro_speed"], n["gyro_deadzone"]]),
+                self.recenter,
                 ft.Row([n["stick_speed"], n["stick_deadzone"]]),
                 ft.Row([n["ir_range"], n["ir_smoothing"]])], subtitle=t("pc_mouse_hint")),
             section(t("pc_help_title"), ft.Icons.HELP_OUTLINE, [
@@ -120,7 +123,7 @@ class PcEditor:
     def collect(self, template):
         result = dict(template)
         source = None if self.source.value in (None, "none") else self.source.value
-        mouse = dict(template["mouse"], source=source)
+        mouse = dict(template["mouse"], source=source, recenter_on_calibration=bool(self.recenter.value))
         for key, field in self.numbers.items():
             try:
                 mouse[key] = float(field.value)

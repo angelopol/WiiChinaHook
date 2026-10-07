@@ -150,7 +150,8 @@ class ApiServer:
         if command == "forget":
             return await self.manager.forget(slot)
         if command == "slot_options":
-            options = {k: args.get(k) for k in ("quick_calibration", "combo", "ir_calibration")}
+            options = {k: args.get(k) for k in ("quick_calibration", "combo", "ir_calibration", "combo_hold_ms",
+                                                 "combo_window_ms")}
             return self.manager.set_slot_options(slot, **options)
         if command == "quick_calibrate":
             return await self.manager.session_for(slot).quick_calibrate()
@@ -160,6 +161,11 @@ class ApiServer:
             return await self.manager.calibrate_axis(slot, args["axis"])
         if command == "calibrate":
             return await self.manager.calibrate(slot)
+        if command == "calibrate_noise":
+            seconds = args.get("seconds", 10)
+            if isinstance(seconds, bool) or not isinstance(seconds, (int, float)) or not 10 <= seconds <= 30:
+                raise ValueError("seconds must be 10..30")
+            return await self.manager.calibrate_noise(slot, float(seconds), bool(args.get("reset", False)))
         if command == "led":
             await self.manager.session_for(slot).set_led(args["mask"])
             return {"slot": slot}

@@ -73,6 +73,10 @@ TEXT = {
         "sound_event_low_battery": "Low battery",
         "calibrate": "Calibrate gyro",
         "calibrate_hint": "Keep the Wiimote still for 3 seconds",
+        "noise": "Gyro noise",
+        "noise_hint": "Filter the gyro's jitter at rest: leave the remote on a table, untouched, for 10 seconds",
+        "noise_running": "Measuring gyro noise: leave the remote on the table without touching it for 10 seconds…",
+        "noise_done": "Gyro noise filtered: readings below {gate} °/s (yaw / roll / pitch) now read 0",
         "calibrated": "Slot {n} calibrated",
         "leds": "LEDs",
         "forget": "Forget",
@@ -164,7 +168,14 @@ TEXT = {
         "gp_mode": "Mode",
         "gp_empty": "empty",
         "gp_modifier": "Mode modifier",
-        "gp_modifier_hint": "The Wiimote POWER button is not reported by the hardware, so it cannot be used.",
+        "gp_modifier_hint": "The Wiimote POWER button is not reported by the hardware, so it cannot be used. "
+                            "With a DolphinBar, Home is not offered: the bar uses Home + D-pad itself.",
+        "combo_hold_ms": "Hold (ms)",
+        "combo_hold_hint": "How long the combination must be held to recalibrate (200–3000 ms)",
+        "combo_window_ms": "Window (ms)",
+        "combo_window_hint": "Combination window: Home, + or − pressed alone do nothing for this long (or "
+                             "until the combination is complete), so the game never sees them (0–1000 ms)",
+        "combo_minus_home_plus": "− + Home + +",
         "gp_edit_mode": "Edit",
         "app_title": "App",
         "app_autostart": "Start with Windows",
@@ -240,6 +251,9 @@ TEXT = {
         "pc_ir_range": "IR range (0.05–1)",
         "pc_ir_smoothing": "IR smoothing (0–0.95)",
         "pc_shake_g": "Shake strength",
+        "pc_recenter_on_calibration": "Recenter the mouse when recalibrating",
+        "pc_recenter_hint": "Gyro mouse: the quick calibration combination also puts the pointer in the centre "
+                            "of the screen (point the remote at the centre while you recalibrate).",
         "pc_mouse_hint": "Whatever moves the mouse cannot also be mapped: with the D-pad or the Nunchuk stick, "
                          "their rows below are disabled. The gyroscope moves the mouse as you turn the remote "
                          "(quick calibration removes drift); IR places it where you point; the stick and the "
@@ -414,6 +428,10 @@ TEXT = {
         "sound_event_low_battery": "Batería baja",
         "calibrate": "Calibrar giroscopio",
         "calibrate_hint": "Mantén el Wiimote quieto 3 segundos",
+        "noise": "Ruido del giroscopio",
+        "noise_hint": "Filtra la vibración del giroscopio en reposo: deja el mando sobre la mesa, sin tocarlo, 10 segundos",
+        "noise_running": "Midiendo el ruido del giroscopio: deja el mando sobre la mesa sin tocarlo durante 10 segundos…",
+        "noise_done": "Ruido filtrado: las lecturas por debajo de {gate} °/s (yaw / roll / pitch) ahora son 0",
         "calibrated": "Slot {n} calibrado",
         "leds": "LEDs",
         "forget": "Olvidar",
@@ -504,7 +522,14 @@ TEXT = {
         "gp_mode": "Modo",
         "gp_empty": "vacío",
         "gp_modifier": "Modificador de modo",
-        "gp_modifier_hint": "El botón POWER del Wiimote no lo envía el hardware, así que no se puede usar.",
+        "gp_modifier_hint": "El botón POWER del Wiimote no lo envía el hardware, así que no se puede usar. "
+                            "Con DolphinBar no se ofrece Home: la barra usa Home + cruceta para sí misma.",
+        "combo_hold_ms": "Mantener (ms)",
+        "combo_hold_hint": "Cuánto hay que mantener la combinación para recalibrar (200–3000 ms)",
+        "combo_window_ms": "Margen (ms)",
+        "combo_window_hint": "Margen de combinación: Home, + o − pulsados solos no hacen nada durante este tiempo "
+                             "(o hasta que la combinación esté completa), así el juego nunca los ve (0–1000 ms)",
+        "combo_minus_home_plus": "− + Home + +",
         "gp_edit_mode": "Editar",
         "app_title": "Aplicación",
         "app_autostart": "Iniciar con Windows",
@@ -581,6 +606,9 @@ TEXT = {
         "pc_ir_range": "Rango IR (0,05–1)",
         "pc_ir_smoothing": "Suavizado IR (0–0,95)",
         "pc_shake_g": "Fuerza de sacudida",
+        "pc_recenter_on_calibration": "Recentrar el ratón al recalibrar",
+        "pc_recenter_hint": "Ratón por giroscopio: la combinación de calibración rápida también lleva el puntero "
+                            "al centro de la pantalla (apunta el mando al centro mientras recalibras).",
         "pc_mouse_hint": "Lo que mueve el ratón no se puede mapear también: con la cruceta o el stick del "
                          "Nunchuk, sus filas de abajo quedan desactivadas. El giroscopio mueve el ratón al girar "
                          "el mando (la calibración rápida elimina la deriva); el IR lo coloca donde apuntas; el "

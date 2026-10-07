@@ -82,8 +82,10 @@ La parte delicada es el ritmo. Si los reportes llegan tarde, el búfer del mando
 y el sonido se entrecorta. Si llegan antes de tiempo, se desborda. El bucle asyncio en
 Windows tiene una granularidad de unos 15 ms, así que un hilo dedicado marca el ritmo
 con plazos absolutos. Desde Python 3.11, `time.sleep` usa un temporizador de alta
-resolución en Windows. Ese hilo entrega cada reporte al bucle de eventos, que es el
-dueño del transporte.
+resolución en Windows. Con la DolphinBar, ese hilo escribe cada reporte directamente en la cola de escritura de la
+ranura. Por Bluetooth lo entrega al bucle de eventos, que es el dueño del transporte. Si el
+sistema retrasa el hilo, sigue un periodo después del último reporte en lugar de enviar de
+golpe los atrasados, que desbordarían el búfer del mando.
 
 ## Límites
 

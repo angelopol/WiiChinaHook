@@ -259,6 +259,9 @@ class WiimoteManager:
         if entry.get("gyro_scale_frame") == GYRO_SCALE_FRAME:  # older factors used wrong axes
             session.parser.gyro_scale = tuple(entry["gyro_scale"])
             state.calibration["gyro_scale"] = list(session.parser.gyro_scale)
+        if entry.get("gyro_noise"):
+            session.parser.gyro_deadband = tuple(entry["gyro_noise"])
+            state.calibration["gyro_noise_dps"] = list(session.parser.gyro_deadband)
         self.sessions[address] = session
         session.apply_options(self.slot_options[entry["slot"]])
         session.on_bias_changed = lambda bias, a=address: self.save_entry(a, gyro_bias=list(bias))
@@ -419,7 +422,8 @@ class WiimoteManager:
         """Change a slot's quick/IR calibration options live (the GUI also saves them)."""
         if not isinstance(slot, int) or slot not in range(4):
             raise ValueError("slot must be 0..3")
-        unknown = set(changes) - {"quick_calibration", "combo", "ir_calibration"}
+        unknown = set(changes) - {"quick_calibration", "combo", "ir_calibration", "combo_hold_ms",
+                                 "combo_window_ms"}
         if unknown:
             raise ValueError(f"Unknown option: {', '.join(sorted(unknown))}")
         current = asdict(self.slot_options[slot])
@@ -435,6 +439,13 @@ class WiimoteManager:
         if address in self.registry.devices:
             self.registry.devices[address].update(values)
             self.registry.save()
+
+    async def calibrate_noise(self, slot, seconds=10.0, reset=False):
+        session = self.session_for(slot)
+        result = session.clear_noise() if reset else await session.calibrate_noise(seconds)
+        self.save_entry(session.state.address, gyro_bias=list(session.parser.gyro_bias),
+                        gyro_noise=list(session.parser.gyro_deadband))
+        return result
 
     async def calibrate_axis(self, slot, axis):
         session = self.session_for(slot)

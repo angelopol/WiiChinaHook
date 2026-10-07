@@ -162,6 +162,7 @@ signos invertidos, sesgo) y con la captura real de cabeceo del clon (factor ≈ 
 | USB retirado | Estados desconectados y recuperación al insertar |
 | Regreso a Dolphin | Cerrar hook y recuperar el adaptador desde Dolphin |
 | Cambio de controlador | Ajustes → Controlador del adaptador: Intel a libusbK y de vuelta al Bluetooth de Windows, con UAC y sin Zadig |
+| Filtro de ruido del giroscopio | Sobre la mesa 10 s: doble vibración; después las barras del giroscopio marcan 0 en reposo y la vista 3D deja de temblar; los giros lentos se siguen detectando |
 | Calibración rápida | Mantener la combinación ~0,6 s: doble vibración si está quieto (sesgo renovado y recentrado), larga si se mueve |
 | Calibración con la barra | Apuntar a la barra elimina la deriva del giro; **verificar el signo de la imagen IR** (al girar a la izquierda la barra debe seguir "de frente") |
 | Altavoz | **Sonido** en una tarjeta: campanilla limpia por Bluetooth passthrough y después por la DolphinBar (¿reenvía la barra los `0x18`?); sin cortes; el altavoz queda en silencio después. Luego los sonidos de eventos y un `.wav` propio ([SPEAKER.es.md](SPEAKER.es.md)) |

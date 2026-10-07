@@ -79,7 +79,10 @@ Timing is the delicate part. If reports arrive late, the remote's buffer empties
 the sound stutters. If they arrive early, it overflows. The asyncio loop on Windows has
 about 15 ms granularity, so a dedicated thread paces the reports with absolute
 deadlines. Since Python 3.11, `time.sleep` uses a high-resolution timer on Windows.
-That thread hands each report to the event loop that owns the transport.
+With the DolphinBar, that thread writes each report straight to the slot's writer queue.
+Over Bluetooth it hands each report to the event loop that owns the transport. If the OS
+stalls the thread, it carries on one period after the last report instead of sending the
+overdue ones in a burst, which would overflow the remote's buffer.
 
 ## Limits
 
